@@ -1,0 +1,14 @@
+﻿const fs = require('fs');
+const s = fs.readFileSync('server.js','utf8');
+console.log('Redis error handler:', s.includes('redis.on("error"'));
+console.log('No chunkCount:', !s.includes('chunkCount'));
+console.log('No buffer approach:', !s.includes('let buffer ='));
+console.log('flushHeaders present:', s.includes('res.flushHeaders()'));
+console.log('credentials:true in CORS:', s.includes('credentials: true'));
+console.log('Single app.listen:', (s.match(/app\\.listen\\(/g)||[]).length === 1);
+console.log('Single /api/chat:', (s.match(/app\\.post\\(["\\']\\/api\\/chat/g)||[]).length === 1);
+console.log('No Pool import:', !s.includes('from "pg"'));
+console.log('No session import:', !s.includes('from "express-session"'));
+console.log('Supabase before routes:', s.indexOf('createClient') < s.indexOf('app.post'));
+console.log('Middleware before routes:', s.indexOf('app.use(cors') < s.indexOf('app.post'));
+console.log('app.listen at bottom:', s.indexOf('app.listen(') > s.indexOf('app.post("/api/chat"'));

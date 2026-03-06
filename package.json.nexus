@@ -1,0 +1,40 @@
+{
+  "name": "nexus-platform",
+  "version": "1.0.0",
+  "description": "Nexus - AI-powered autonomous decision intelligence platform",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "monitor": "node monitoring/monitor.js",
+    "db:init": "psql $DATABASE_URL -f db/schema.sql",
+    "analytics:start": "cd analytics_service && uvicorn main:app --port 8001 --reload",
+    "frontend:dev": "vite"
+  },
+  "keywords": [
+    "analytics",
+    "ai",
+    "insights",
+    "machine-learning"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "multer": "^1.4.5-lts.1",
+    "csv-parse": "^5.5.6",
+    "xlsx": "^0.18.5",
+    "pg": "^8.11.5",
+    "ioredis": "^5.3.2",
+    "bullmq": "^5.7.0",
+    "openai": "^4.47.1",
+    "axios": "^1.7.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

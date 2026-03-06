@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nexus Analytics — Final</title>
+  <!-- Tailwind CDN (play) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .brand-gradient{background:linear-gradient(90deg,#6366f1,#06b6d4)}
+    .brand-gradient-text{background:linear-gradient(90deg,#6366f1,#06b6d4);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .glass{background:rgba(2,6,23,0.6);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.04);}
+    .light-mode .glass{background:rgba(255,255,255,0.8);color:#0f172a;border:1px solid rgba(2,6,23,0.04)}
+    .onboarding-step{transition:width .4s ease}
+    .skeleton{background:#0f172a}
+    @media print{ nav, .btn, .sidebar, .glass{display:none !important} body{background:#fff;color:#000} }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100">
+  <div id="root"></div>
+
+  <!-- Use Vite dev server build during local development (precompiled modules) -->
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
