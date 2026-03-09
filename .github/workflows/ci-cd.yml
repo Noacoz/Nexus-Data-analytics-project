@@ -27,7 +27,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      # Create .env file with secrets for build
       - name: Create env file
         run: |
           echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
@@ -44,7 +43,8 @@ jobs:
           file: Dockerfile.web
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/nexus-web:latest
+          # CRITICAL FIX: Use lowercase for username
+          tags: ghcr.io/noacoz/nexus-web:latest
           no-cache: true
           
       - name: Build and push api image
@@ -54,5 +54,6 @@ jobs:
           file: Dockerfile.api
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/nexus-api:latest
+          # CRITICAL FIX: Use lowercase for username
+          tags: ghcr.io/noacoz/nexus-api:latest
           no-cache: true
