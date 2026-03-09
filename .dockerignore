@@ -1,6 +1,16 @@
+@'
 node_modules
 dist
-data
 npm-debug.log
 .env
 .DS_Store
+*.log
+*.tmp
+.git
+.github
+README.md
+.gitignore
+.dockerignore
+# Don't ignore data directory (remove it from ignore list)
+!data/
+'@ | Out-File -FilePath .dockerignore -Encoding UTF8
