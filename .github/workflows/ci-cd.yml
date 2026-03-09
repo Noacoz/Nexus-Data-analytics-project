@@ -34,7 +34,7 @@ jobs:
           file: Dockerfile.web
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/nexus-web:latest
+          tags: ghcr.io/noacoz/nexus-web:latest
 
       - name: Build and push api image
         uses: docker/build-push-action@v4
@@ -43,4 +43,4 @@ jobs:
           file: Dockerfile.api
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/nexus-api:latest
+          tags: ghcr.io/noacoz/nexus-api:latest
