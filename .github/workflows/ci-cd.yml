@@ -43,6 +43,7 @@ jobs:
           file: Dockerfile.web
           platforms: linux/amd64
           push: true
+          # CRITICAL FIX: Use lowercase for username
           tags: ghcr.io/noacoz/nexus-web:latest
           no-cache: true
           
@@ -53,5 +54,6 @@ jobs:
           file: Dockerfile.api
           platforms: linux/amd64
           push: true
+          # CRITICAL FIX: Use lowercase for username
           tags: ghcr.io/noacoz/nexus-api:latest
           no-cache: true
