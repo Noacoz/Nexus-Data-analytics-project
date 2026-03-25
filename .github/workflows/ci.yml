@@ -19,13 +19,12 @@ jobs:
         with:
           node-version: '20'
       
-      - name: Debug secrets availability
+      - name: Debug secrets
         run: |
-          echo "Checking if secrets are available..."
-          if [ -n "$SUPABASE_URL" ]; then echo "SUPABASE_URL: ✓ available"; else echo "SUPABASE_URL: ✗ MISSING"; fi
-          if [ -n "$SUPABASE_SERVICE_KEY" ]; then echo "SUPABASE_SERVICE_KEY: ✓ available"; else echo "SUPABASE_SERVICE_KEY: ✗ MISSING"; fi
-          if [ -n "$GROQ_API_KEY" ]; then echo "GROQ_API_KEY: ✓ available"; else echo "GROQ_API_KEY: ✗ MISSING"; fi
-          if [ -n "$JWT_SECRET" ]; then echo "JWT_SECRET: ✓ available"; else echo "JWT_SECRET: ✗ MISSING"; fi
+          echo "SUPABASE_URL: ${SUPABASE_URL:+present}"
+          echo "SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:+present}"
+          echo "GROQ_API_KEY: ${GROQ_API_KEY:+present}"
+          echo "JWT_SECRET: ${JWT_SECRET:+present}"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -35,17 +34,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Create .env file
+      - name: Create env file
         run: |
-          echo "Creating .env file..."
-          echo "SUPABASE_URL=$SUPABASE_URL" > .env
-          echo "SUPABASE_SERVICE_KEY=$SUPABASE_SERVICE_KEY" >> .env
-          echo "GROQ_API_KEY=$GROQ_API_KEY" >> .env
-          echo "JWT_SECRET=$JWT_SECRET" >> .env
+          echo "SUPABASE_URL=${SUPABASE_URL}" > .env
+          echo "SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}" >> .env
+          echo "GROQ_API_KEY=${GROQ_API_KEY}" >> .env
+          echo "JWT_SECRET=${JWT_SECRET}" >> .env
           echo "PORT=5000" >> .env
           echo "NODE_ENV=test" >> .env
-          echo ".env file created"
-          wc -l .env
+          echo "Created .env file"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
