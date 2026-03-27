@@ -21,6 +21,13 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+import duckdb
+import pyarrow as pa
+import pyarrow.parquet as pq
+import re
+import httpx
+
+
 app = FastAPI(title="Nexus Analytics Engine", version="1.0.0")
 
 # CORS
@@ -444,10 +451,236 @@ class NexusAnalyticsEngine:
             logger.error(f"Analytics engine error: {str(e)}")
             raise
 
+class DuckDBQueryEngine:
+    """In-process DuckDB query engine for Parquet datasets"""
+    
+    def __init__(self):
+        self.conn = duckdb.connect()
+    
+    def execute_query(self, dataset_id: str, sql: str) -> dict:
+        """Execute SQL against Parquet file, return JSON-serializable results"""
+        try:
+            parquet_path = f"/data/bronze/{dataset_id}.parquet"
+            if not os.path.exists(parquet_path):
+                return {
+                    "success": False,
+                    "error": "file_not_found",
+                    "message": f"Parquet file not found: {parquet_path}"
+                }
+            
+        # Register Parquet as a named view (safe view name: hyphens → underscores)
+        view_name = f"dataset_{dataset_id.replace('-', '_')}"
+        self.conn.execute(
+            f"CREATE OR REPLACE VIEW {view_name} AS SELECT * FROM '{parquet_path}'"
+        )
+        # Execute the user's full SQL directly against the view
+        result = self.conn.execute(sql).fetchall()
+        columns = [desc[0] for desc in self.conn.description]
+            
+            rows = []
+            for row in result:
+                row_dict = {}
+                for i, val in enumerate(row):
+                    if val is None:
+                        row_dict[columns[i]] = None
+                    elif isinstance(val, (int, float, bool)):
+                        row_dict[columns[i]] = val
+                    else:
+                        row_dict[columns[i]] = str(val)
+                rows.append(row_dict)
+            
+            return {
+                "success": True,
+                "columns": columns,
+                "rows": rows,
+                "row_count": len(rows),
+                "sql": sql
+            }
+        except FileNotFoundError:
+            return {
+                "success": False,
+                "error": "file_not_found",
+                "message": f"Dataset Parquet not found: {dataset_id}"
+            }
+        except duckdb.Error as e:
+            return {
+                "success": False,
+                "error": "query_error",
+                "message": f"SQL error: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "internal_error",
+                "message": f"Query execution failed: {str(e)}"
+            }
+    
+    def get_schema(self, dataset_id: str) -> list[dict]:
+        """Get column names and types for dataset"""
+        try:
+            parquet_path = f"/data/bronze/{dataset_id}.parquet"
+            if not os.path.exists(parquet_path):
+                return []
+            
+            result = self.conn.execute(f"DESCRIBE SELECT * FROM '{parquet_path}' LIMIT 0").fetchall()
+            schema = []
+            for row in result:
+                schema.append({
+                    "name": row[0],
+                    "type": str(row[1]).lower()
+                })
+            return schema
+        except Exception as e:
+            logger.error(f"Schema error for {dataset_id}: {str(e)}")
+            return []
+
+class MedallionPipeline:
+    """Medallion architecture bronze to silver pipeline"""
+    
+    def bronze_to_silver(self, dataset_id: str) -> dict:
+        bronze_path = f"/data/bronze/{dataset_id}.parquet"
+        if not os.path.exists(bronze_path):
+            return {"success": False, "error": "bronze_file_not_found"}
+        
+        # Read bronze
+        table = pq.read_table(bronze_path)
+        df = table.to_pandas()
+        rows_in = len(df)
+        
+        # Strip whitespace from string columns
+        for col in df.columns:
+            if df[col].dtype == "object":
+                df[col] = df[col].astype(str).str.strip()
+        
+        # Drop rows where every column is null
+        df = df.dropna(how="all")
+        rows_out = len(df)
+        
+        # Cast numeric columns (>80% parseable)
+        columns_cast = []
+        for col in df.columns:
+            temp = pd.to_numeric(df[col], errors="coerce")
+            parse_pct = 1 - temp.isnull().sum() / len(temp)
+            if parse_pct > 0.8:
+                df[col] = temp.astype("float64")
+                columns_cast.append(col)
+        
+        # Standardize column names to snake_case
+        original_cols = list(df.columns)
+        new_cols = []
+        columns_normalized = []
+        for col in original_cols:
+            # Remove non-alphanumeric, replace spaces/multiple with _, lowercase, strip trailing _
+            snake_col = re.sub(r"[^a-zA-Z0-9]+", "_", str(col)).lower().strip("_")
+            new_cols.append(snake_col)
+            if snake_col != col:
+                columns_normalized.append(snake_col)
+        
+        df.columns = new_cols
+        
+        # Write silver
+        silver_dir = "/data/silver"
+        os.makedirs(silver_dir, exist_ok=True)
+        silver_path = f"{silver_dir}/{dataset_id}.parquet"
+        silver_table = pa.Table.from_pandas(df)
+        pq.write_table(silver_table, silver_path)
+        
+        return {
+            "success": True,
+            "rows_in": rows_in,
+            "rows_out": rows_out,
+            "columns_normalized": columns_normalized,
+            "columns_cast": columns_cast
+        }
+    
+    def get_silver_schema(self, dataset_id: str) -> list[dict]:
+        silver_path = f"/data/silver/{dataset_id}.parquet"
+        if not os.path.exists(silver_path):
+            return []
+        
+        schema = pq.read_schema(silver_path)
+        return [{"column": field.name, "type": str(field.type)} for field in schema.fields]
+
+
+class SemanticModel:
+    """Semantic model layer above silver - business-friendly interface"""
+
+    @staticmethod
+    def build_model(dataset_id: str) -> dict:
+        silver_path = f"/data/silver/{dataset_id}.parquet"
+        if not os.path.exists(silver_path):
+            return {"error": "silver_parquet_not_found"}
+
+        table = pq.read_table(silver_path)
+        schema = table.schema
+        
+        measures = []
+        dimensions = []
+        time_dimension = None
+        
+        for field in schema:
+            col_name = field.name.lower()
+            field_type = str(field.type)
+            
+            if "float64" in field_type:
+                measures.append(field.name)
+            else:
+                dimensions.append(field.name)
+            
+            # Detect time dimension
+            if any(keyword in col_name for keyword in ["date", "time", "year"]):
+                time_dimension = field.name
+                # Remove from dimensions
+                if field.name in dimensions:
+                    dimensions.remove(field.name)
+        
+        model = {
+            "dataset_id": dataset_id,
+            "measures": measures,
+            "dimensions": dimensions,
+            "time_dimension": time_dimension,
+            "built_at": datetime.utcnow().isoformat()
+        }
+        
+        # Create models directory
+        models_dir = "/data/models"
+        os.makedirs(models_dir, exist_ok=True)
+        
+        # Write model
+        model_path = f"{models_dir}/{dataset_id}.json"
+        with open(model_path, "w") as f:
+            json.dump(model, f, indent=2)
+        
+        return model
+
+    @staticmethod
+    def load_model(dataset_id: str) -> dict:
+        model_path = f"/data/models/{dataset_id}.json"
+        if not os.path.exists(model_path):
+            return {"error": "model_not_found"}
+        
+        with open(model_path, "r") as f:\n            return json.load(f)\n\n\nclass NLQueryEngine:\n    \"\"\"Natural language to SQL translation engine\"\"\"\n    \n    @staticmethod\n    def build_prompt(question: str, schema: list[dict], model: dict) -> str:\n        \"\"\"Build LLM prompt with schema and semantic model\"\"\"\n        schema_str = \"\\n\".join([f\"- {col['column']} ({col['type']})\" for col in schema])\n        view_name = f\"dataset_{model['dataset_id'].replace('-', '_')}\"\n        \n        measures_str = ', '.join(model.get('measures', []))\n        dimensions_str = ', '.join(model.get('dimensions', []))\n        time_dim = model.get('time_dimension', 'none')\n        \n        prompt = f\"\"\"You are an expert DuckDB SQL engineer. Translate this question into a SINGLE valid DuckDB SQL SELECT statement.\n\nTable to query: `{view_name}`\n\nSCHEMA:\n{schema_str}\n\nSEMANTIC MODEL:\n- MEASURES (numeric for aggregation): {measures_str}\n- DIMENSIONS (for GROUP BY): {dimensions_str}\n- TIME DIMENSION: {time_dim}\n\nQuestion: {question}\n\nCRITICAL RULES:\n- Return ONLY the SQL SELECT statement. NO explanation, NO markdown, NO backticks, NO ```sql\n- Table MUST be `{view_name}`\n- Use LIMIT 1000 for safety\n- Use standard SQL functions: COUNT, SUM, AVG, GROUP BY, ORDER BY, WHERE\n- Handle dates with DATE_TRUNC, DATE_PART if needed\"\"\"\n        \n        return prompt\n    \n    @staticmethod\n    def translate_and_execute(dataset_id: str, question: str) -> dict:\n        \"\"\"Translate NL question -> SQL -> execute -> return results\"\"\"\n        try:\n            # Load semantic model\n            model = SemanticModel.load_model(dataset_id)\n            if \"error\" in model:\n                return {\"success\": False, \"error\": \"model_not_found\"}\n            \n            # Get silver schema\n            pipeline = MedallionPipeline()\n            schema = pipeline.get_silver_schema(dataset_id)\n            \n            # Build prompt\n            prompt = NLQueryEngine.build_prompt(question, schema, model)\n            \n            # Groq API call\n            api_key = os.getenv(\"GROQ_API_KEY\")\n            if not api_key:\n                return {\"success\": False, \"error\": \"GROQ_API_KEY environment variable not set\"}\n            \n            with httpx.Client(timeout=30.0) as client:\n                response = client.post(\n                    \"https://api.groq.com/openai/v1/chat/completions\",\n                    headers={\n                        \"Authorization\": f\"Bearer {api_key}\",\n                        \"Content-Type\": \"application/json\"\n                    },\n                    json={\n                        \"model\": \"llama3-70b-8192\",\n                        \"messages\": [{\"role\": \"system\", \"content\": \"You are a SQL expert.\"}, {\"role\": \"user\", \"content\": prompt}],\n                        \"temperature\": 0.1,\n                        \"max_tokens\": 2000\n                    }\n                )\n                response.raise_for_status()\n                llm_response = response.json()\n                sql = llm_response[\"choices\"][0][\"message\"][\"content\"].strip()\n            \n            # Execute SQL\n            query_engine = DuckDBQueryEngine()\n            result = query_engine.execute_query(dataset_id, sql)\n            \n            return {\n                \"success\": True,\n                \"question\": question,\n                \"sql\": sql,\n                \"result\": result\n            }\n        except Exception as e:\n            return {\"success\": False, \"error\": str(e)}
+
+
+def write_parquet(dataset_id: str, df: pd.DataFrame) -> str:
+    """Write DataFrame to Parquet bronze layer"""
+    bronze_dir = "/data/bronze"
+    os.makedirs(bronze_dir, exist_ok=True)
+    
+    parquet_path = f"{bronze_dir}/{dataset_id}.parquet"
+    try:
+        table = pa.Table.from_pandas(df)
+        pq.write_table(table, parquet_path)
+        return parquet_path
+    except Exception as e:
+        logger.error(f"Parquet write failed for {dataset_id}: {str(e)}")
+        raise
+
 
 def get_db_connection():
     """Get database connection from pool"""
     return db_pool.getconn()
+
 
 
 def release_db_connection(conn):
@@ -483,9 +716,15 @@ async def analyze_dataset(dataset_id: str):
             if not rows:
                 raise HTTPException(status_code=404, detail="No rows found for dataset")
             
+            # Build DataFrame and write Parquet (bronze layer)
+            df = pd.DataFrame(rows)
+            parquet_path = write_parquet(dataset_id, df)
+            logger.info(f"Wrote Parquet bronze layer: {parquet_path}")
+            
             # Run analytics
             engine = NexusAnalyticsEngine(rows, dataset_id)
             result = engine.run()
+
             
             # Store snapshot
             cur = conn.cursor()
@@ -585,11 +824,24 @@ async def get_latest_snapshot(dataset_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/schema/{dataset_id}")
+async def get_dataset_schema(dataset_id: str):
+    """Get Parquet dataset schema"""
+    engine = DuckDBQueryEngine()
+    schema = engine.get_schema(dataset_id)
+    return {"schema": schema}
+
+
+
+
+
+
 @app.post("/drift/{dataset_id}")
 async def detect_drift(dataset_id: str):
     """Detect statistical drift between snapshots"""
     try:
         conn = get_db_connection()
+
         try:
             cur = conn.cursor()
             
@@ -650,6 +902,112 @@ async def detect_drift(dataset_id: str):
         logger.error(f"Drift detection error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+def compute_distribution_drift(dataset_id_a: str, dataset_id_b: str) -> dict:
+    """
+    Compute Kolmogorov-Smirnov distribution drift between two silver datasets.
+    Compares full distributions using KS 2-sample test on numeric columns.
+    """
+    silver_path_a = f"/data/silver/{dataset_id_a}.parquet"
+    silver_path_b = f"/data/silver/{dataset_id_b}.parquet"
+    
+    missing = []
+    if not os.path.exists(silver_path_a):
+        missing.append(dataset_id_a)
+    if not os.path.exists(silver_path_b):
+        missing.append(dataset_id_b)
+    
+    if missing:
+        return {
+            "success": False,
+            "error": "silver_file_not_found",
+            "missing": missing
+        }
+    
+    try:
+        # Load silver Parquet files
+        df_a = pq.read_table(silver_path_a).to_pandas()
+        df_b = pq.read_table(silver_path_b).to_pandas()
+        
+        # Common numeric columns
+        common_cols = set(df_a.select_dtypes(include=['float64', 'int64']).columns) & \
+                      set(df_b.select_dtypes(include=['float64', 'int64']).columns)
+        
+        columns_tested = len(common_cols)
+        drifted_columns = []
+        
+        for col in common_cols:
+            # Drop NaN for KS test
+            data_a = df_a[col].dropna()
+            data_b = df_b[col].dropna()
+            
+            # Require minimum 30 samples per dataset
+            if len(data_a) >= 30 and len(data_b) >= 30:
+                ks_statistic, p_value = stats.ks_2samp(data_a, data_b)
+                
+                if p_value < 0.05:
+                    drifted_columns.append({
+                        "column": col,
+                        "ks_statistic": float(ks_statistic),
+                        "p_value": float(p_value)
+                    })
+        
+        drift_detected = len(drifted_columns) > 0
+        
+        return {
+            "success": True,
+            "dataset_a": dataset_id_a,
+            "dataset_b": dataset_id_b,
+            "columns_tested": columns_tested,
+            "drifted_columns": drifted_columns,
+            "drift_detected": drift_detected
+        }
+    
+    except Exception as e:
+        logger.error(f"Distribution drift computation error: {str(e)}")
+        return {
+            "success": False,
+            "error": "computation_failed",
+            "message": str(e)
+        }
+
+
+@app.get("/drift/distribution/{dataset_id_a}/{dataset_id_b}")
+async def distribution_drift(dataset_id_a: str, dataset_id_b: str):
+    """Distribution-level drift detection using KS test on silver Parquet datasets"""
+    return compute_distribution_drift(dataset_id_a, dataset_id_b)
+
+@app.post("/pipeline/bronze-to-silver/{dataset_id}")
+async def bronze_to_silver_endpoint(dataset_id: str):
+    """Convert bronze to silver layer"""
+    pipeline = MedallionPipeline()
+    result = pipeline.bronze_to_silver(dataset_id)
+    return result
+
+
+@app.post("/nl-query/{dataset_id}")
+async def nl_query(dataset_id: str, request_data: dict):
+    """
+    Natural language query endpoint
+    POST /nl-query/my-dataset
+    {"question": "What are the top 5 customers by revenue?"}
+    """
+    question = request_data.get("question")
+    if not question:
+        raise HTTPException(status_code=400, detail="Field 'question' is required")
+    
+    result = NLQueryEngine.translate_and_execute(dataset_id, question)
+    return result
+
+@app.post("/model/build/{dataset_id}")
+async def build_model_endpoint(dataset_id: str):
+    model = SemanticModel.build_model(dataset_id)
+    return model
+
+@app.get("/model/{dataset_id}")
+async def load_model_endpoint(dataset_id: str):
+    model = SemanticModel.load_model(dataset_id)
+    return model
 
 if __name__ == "__main__":
     import uvicorn

@@ -9,7 +9,7 @@ services:
     environment:
       - API_KEY=${API_KEY:-}
     volumes:
-      - ./data:/app/data
+      - ./data:/data
 
   web:
     build:

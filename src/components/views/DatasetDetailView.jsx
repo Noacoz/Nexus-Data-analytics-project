@@ -28,6 +28,10 @@ export default function DatasetDetailView({ datasetId, datasets, onBack, pushToa
   const [chatMessages, setChatMessages] = useState([{role: 'assistant', content: ''}])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [nlQuestion, setNlQuestion] = useState('');
+  const [nlLoading, setNlLoading] = useState(false);
+  const [nlResult, setNlResult] = useState(null);
+  const [nlError, setNlError] = useState(null);
   const chatEndRef = useRef(null)
   const dataset = datasets.find(d => d.id === datasetId)
   const quickQuestions = ['What are the key trends?', 'Summarize this dataset', 'Identify anomalies', 'Give me 3 actionable insights']
@@ -267,6 +271,45 @@ export default function DatasetDetailView({ datasetId, datasets, onBack, pushToa
                   placeholder="Ask about your data..." className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
                 <button onClick={()=>sendChat(chatInput)} disabled={!chatInput.trim()||chatLoading}
                   className="px-4 py-2.5 brand-gradient text-white rounded-xl text-sm font-medium disabled:opacity-40">Send</button>
+              </div>
+              <div style={{marginTop: '2rem', borderTop: '1px solid #333', paddingTop: '1.5rem'}}>
+                <h3 style={{marginBottom: '1rem'}}>Ask AURORA</h3>
+                <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem'}}>
+                  <input
+                    type="text"
+                    value={nlQuestion}
+                    onChange={e => setNlQuestion(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleNlQuery()}
+                    placeholder="Ask a question about this dataset..."
+                    style={{flex: 1, padding: '0.5rem', borderRadius: '6px', border: '1px solid #444', background: '#1a1a1a', color: '#fff'}}
+                  />
+                  <button onClick={handleNlQuery} disabled={nlLoading} style={{padding: '0.5rem 1.2rem', borderRadius: '6px', background: '#6366f1', color: '#fff', border: 'none', cursor: 'pointer'}}>
+                    {nlLoading ? 'Thinking...' : 'Ask AURORA'}
+                  </button>
+                </div>
+                {nlError && <div style={{color: '#f87171', marginBottom: '1rem'}}>{nlError}</div>}
+                {nlResult && (
+                  <div>
+                    <div style={{marginBottom: '0.5rem', fontSize: '0.85rem', color: '#9ca3af'}}>Generated SQL:</div>
+                    <pre style={{background: '#111', padding: '1rem', borderRadius: '6px', overflowX: 'auto', fontSize: '0.8rem', color: '#86efac', marginBottom: '1rem'}}>{nlResult.sql}</pre>
+                    {nlResult.result?.rows?.length > 0 ? (
+                      <div style={{overflowX: 'auto'}}>
+                        <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem'}}>
+                          <thead>
+                            <tr>{nlResult.result.columns.map(col => <th key={col} style={{padding: '0.5rem', borderBottom: '1px solid #333', textAlign: 'left', color: '#9ca3af'}}>{col}</th>)}</tr>
+                          </thead>
+                          <tbody>
+                            {nlResult.result.rows.map((row, i) => (
+                              <tr key={i}>{nlResult.result.columns.map(col => <td key={col} style={{padding: '0.5rem', borderBottom: '1px solid #222'}}>{row[col]}</td>)}</tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{color: '#9ca3af'}}>No rows returned.</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
