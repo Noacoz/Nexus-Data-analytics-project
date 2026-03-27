@@ -81,7 +81,7 @@ export default function DashboardView({ datasets, onViewDataset, onUpload, showT
               <button onClick={() => setCurrentView('dashboard')} className="w-full text-left px-4 py-2 rounded text-indigo-400 bg-indigo-600/20 font-medium">
                 📊 Dashboard
               </button>
-              <button onClick={() => setCurrentView('dashboard')} className="w-full text-left px-4 py-2 rounded text-slate-400 hover:bg-slate-800 transition-colors">
+              <button onClick={() => setCurrentView('datasets')} className="w-full text-left px-4 py-2 rounded text-slate-400 hover:bg-slate-800 transition-colors">
                 📁 Datasets
               </button>
               <button onClick={() => setCurrentView('reports')} className="w-full text-left px-4 py-2 rounded text-slate-400 hover:bg-slate-800 transition-colors">

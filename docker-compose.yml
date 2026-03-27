@@ -8,6 +8,8 @@ services:
       - "4000:4000"
     environment:
       - API_KEY=${API_KEY:-}
+    env_file:
+      - .env
     volumes:
       - ./data:/data
 
@@ -21,3 +23,5 @@ services:
       - api
     environment:
       - API_KEY=${API_KEY:-}
+    env_file:
+      - .env

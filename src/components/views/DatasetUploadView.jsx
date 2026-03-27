@@ -61,7 +61,7 @@ export default function DatasetUploadView({ onUpload, onCancel, pushToast }) {
       form.append('name', datasetName)
       form.append('description', description || 'No description provided')
 
-      const response = await fetch('/api/datasets', {
+      const response = await fetch('/api/datasets/upload', {
         method: 'POST',
         credentials: 'include',
         body: form, // Do NOT set Content-Type — browser sets it with boundary automatically
