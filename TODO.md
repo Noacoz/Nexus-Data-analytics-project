@@ -1,7 +1,16 @@
-# Nexus App Fixes TODO
+# Task Progress Tracking
 
-## Plan Breakdown
-1. [x] Fix DatasetUploadView.jsx fetch URL to /api/datasets/upload
-2. [x] Fix DashboardView.jsx Datasets tab onClick to 'datasets'
-3. [x] Verify changes
-4. [x] Complete task
+## Pending Steps
+- [ ] Implement navigation history stack
+- [ ] Pass handleBack to all views with Back buttons
+- [ ] Update all Back buttons to use onBack prop
+- [ ] Add theme toggle state and function
+- [ ] Pass theme props to SettingsView/PreferencesView
+
+## Completed
+- [x] Read App.jsx useState declarations
+- [x] Reported theme toggle status
+- [x] Reported home button handler
+- [x] Reported Back buttons in Support/Profile
+
+Updated 2024

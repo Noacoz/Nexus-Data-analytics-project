@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-export default function SupportView({ setCurrentView }) {
+export default function SupportView({ setCurrentView, onBack }) {
   const [expandedFaq, setExpandedFaq] = useState(null)
 
   const faqs = [
@@ -30,7 +30,7 @@ export default function SupportView({ setCurrentView }) {
     <div className="min-h-screen pt-24 pb-20 px-4">
       <div className="max-w-4xl mx-auto">
         <button
-          onClick={() => setCurrentView('dashboard')}
+          onClick={onBack}
           className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-6 group"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="group-hover:-translate-x-1 transition-transform">

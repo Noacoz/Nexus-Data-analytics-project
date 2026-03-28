@@ -41,6 +41,9 @@ function App() {
   const [showTrialBanner, setShowTrialBanner] = useState(true)
   const [showChatbot, setShowChatbot] = useState(false)
   const [workspaceSettings, setWorkspaceSettings] = useState({})
+  const [viewHistory, setViewHistory] = useState([])
+  const [isDarkMode, setIsDarkMode] = useState(true)
+
 
   // Open chatbot via custom event
   useEffect(() => {
@@ -110,11 +113,26 @@ function App() {
     if (newView === currentView) return
     setIsTransitioning(true)
     setIsMenuOpen(false)
+    setViewHistory(prev => [...prev, currentView])
     setTimeout(() => {
       setCurrentView(newView)
       setIsTransitioning(false)
     }, 300)
   }, [currentView])
+
+  const handleBack = useCallback(() => {
+    setViewHistory(prev => {
+      if (prev.length === 0) return prev
+      const history = [...prev]
+      const previousView = history.pop()
+      setIsTransitioning(true)
+      setTimeout(() => {
+        setCurrentView(previousView)
+        setIsTransitioning(false)
+      }, 300)
+      return history
+    })
+  }, [])
 
   const handlePlanSelection = useCallback((plan) => {
     setSelectedPlan(plan)
@@ -175,14 +193,14 @@ function App() {
     if (currentView === 'contact') return <ContactView onSubmit={handleContactSubmit} />
     if (currentView === 'login') return <LoginView onLogin={handleLogin} setCurrentView={handleViewChange} pushToast={addToast} />
     if (currentView === 'billing') return <BillingView plan={selectedPlan} onSuccess={() => { setIsLoggedIn(true); addToast('Payment processed!', 'success'); handleViewChange('dashboard') }} setCurrentView={handleViewChange} />
-    if (currentView === 'dashboard') return <DashboardView datasets={datasets} onUpload={() => handleViewChange('dataset-upload')} showTrialBanner={showTrialBanner} onDismissTrial={() => setShowTrialBanner(false)} setCurrentView={handleViewChange} pushToast={addToast} currentUser={currentUser} />
-    if (currentView === 'profile') return <ProfileView isLoggedIn={isLoggedIn} onLogout={handleLogout} setCurrentView={handleViewChange} pushToast={addToast} currentUser={currentUser} />
-    if (typeof currentView === 'object' && currentView.view === 'dataset-detail') return <DatasetDetailView datasetId={currentView.datasetId} datasets={datasets} onBack={() => handleViewChange('dashboard')} />
+    if (currentView === 'dashboard') return <DashboardView datasets={datasets} onViewDataset={(datasetId) => handleViewChange({view: 'dataset-detail', datasetId})} onUpload={() => handleViewChange('dataset-upload')} showTrialBanner={showTrialBanner} onDismissTrial={() => setShowTrialBanner(false)} setCurrentView={handleViewChange} pushToast={addToast} currentUser={currentUser} />
+    if (currentView === 'profile') return <ProfileView isLoggedIn={isLoggedIn} onLogout={handleLogout} setCurrentView={handleViewChange} pushToast={addToast} currentUser={currentUser} onBack={handleBack} />
+    if (typeof currentView === 'object' && currentView.view === 'dataset-detail') return <DatasetDetailView datasetId={currentView.datasetId} datasets={datasets} onBack={handleBack} />
     if (currentView === 'dataset-upload') return <DatasetUploadView onUpload={handleAddDataset} onCancel={() => handleViewChange('dashboard')} />
     if (currentView === 'team') return <TeamView onInvite={handleAddTeamMember} setCurrentView={handleViewChange} />
     if (currentView === 'reports') return <ReportsView setCurrentView={handleViewChange} />
     if (currentView === 'settings') return <SettingsView settings={workspaceSettings} onSave={(s) => { setWorkspaceSettings(s); addToast('Settings saved!', 'success') }} setCurrentView={handleViewChange} />
-    if (currentView === 'support') return <SupportView setCurrentView={handleViewChange} />
+    if (currentView === 'support') return <SupportView setCurrentView={handleViewChange} onBack={handleBack} />
     if (currentView === 'usecases') return <UseCasesView setCurrentView={handleViewChange} />
     if (currentView === 'terms') return <TermsView setCurrentView={handleViewChange} />
     if (currentView === 'privacy') return <PrivacyView setCurrentView={handleViewChange} />

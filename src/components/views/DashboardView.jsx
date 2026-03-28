@@ -81,9 +81,10 @@ export default function DashboardView({ datasets, onViewDataset, onUpload, showT
               <button onClick={() => setCurrentView('dashboard')} className="w-full text-left px-4 py-2 rounded text-indigo-400 bg-indigo-600/20 font-medium">
                 📊 Dashboard
               </button>
-              <button onClick={() => setCurrentView('datasets')} className="w-full text-left px-4 py-2 rounded text-slate-400 hover:bg-slate-800 transition-colors">
+<button onClick={() => setCurrentView('dashboard')} className="w-full text-left px-4 py-2 rounded text-slate-400 hover:bg-slate-800 transition-colors">
                 📁 Datasets
               </button>
+
               <button onClick={() => setCurrentView('reports')} className="w-full text-left px-4 py-2 rounded text-slate-400 hover:bg-slate-800 transition-colors">
                 📈 Reports
               </button>
@@ -135,8 +136,9 @@ export default function DashboardView({ datasets, onViewDataset, onUpload, showT
                     </div>
                     <div className="max-h-96 overflow-y-auto">
                       {notifications.map(n => (
-                        <div key={n.id} className={`p-4 border-b border-slate-800 hover:bg-slate-800 cursor-pointer transition-colors ${n.unread ? 'bg-slate-800/50' : ''}`}>
+<div key={n.id} className={`p-4 border-b border-slate-800 hover:bg-slate-800 cursor-pointer transition-colors ${n.unread ? 'bg-slate-800/50' : ''}`} onClick={() => setCurrentView('dashboard')}>
                           <div className="flex items-start gap-3">
+
                             <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${n.unread ? 'bg-cyan-400' : 'bg-slate-600'}`} />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-slate-200">{n.title}</p>

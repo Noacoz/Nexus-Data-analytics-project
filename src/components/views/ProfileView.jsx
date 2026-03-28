@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import API from '../../lib/api'
 
-export default function ProfileView({ isLoggedIn, onLogout, setCurrentView, pushToast }) {
+export default function ProfileView({ isLoggedIn, onLogout, setCurrentView, pushToast, onBack }) {
   const [activeTab, setActiveTab] = useState('personal')
   const [user, setUser] = useState(null)
   const [formData, setFormData] = useState({ name: '', role: '', bio: '' })
@@ -59,7 +59,7 @@ export default function ProfileView({ isLoggedIn, onLogout, setCurrentView, push
     <div className="min-h-screen pt-16 bg-slate-950">
       <div className="max-w-4xl mx-auto p-6">
         <button
-          onClick={() => setCurrentView('dashboard')}
+          onClick={onBack}
           className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-6 group"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="group-hover:-translate-x-1 transition-transform">
