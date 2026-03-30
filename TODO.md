@@ -1,16 +1,7 @@
-# Task Progress Tracking
+# Navigation Fixes TODO
 
-## Pending Steps
-- [ ] Implement navigation history stack
-- [ ] Pass handleBack to all views with Back buttons
-- [ ] Update all Back buttons to use onBack prop
-- [ ] Add theme toggle state and function
-- [ ] Pass theme props to SettingsView/PreferencesView
-
-## Completed
-- [x] Read App.jsx useState declarations
-- [x] Reported theme toggle status
-- [x] Reported home button handler
-- [x] Reported Back buttons in Support/Profile
-
-Updated 2024
+- [x] Add Dashboard button to desktop nav (logged-in section, before Profile)
+- [x] Add Dashboard button to mobile menu (logged-in section, before Profile)
+- [x] Update shouldShowNav in App.jsx to show nav on dashboard
+- [ ] Rebuild with docker compose down && docker compose up --build (executing...)
+- [x] Verify nav appears on dashboard for logged-in users

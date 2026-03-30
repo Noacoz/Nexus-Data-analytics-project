@@ -55,6 +55,9 @@ export default function Navigation({ currentView, isLoggedIn, isMenuOpen, onMenu
           <div className="flex gap-4 items-center">
             {isLoggedIn ? (
               <>
+                <button onClick={() => onNavigate('dashboard')} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors">
+                  Dashboard
+                </button>
                 <button
                   onClick={() => onNavigate('profile')}
                   className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-slate-100 transition-colors"
@@ -127,6 +130,15 @@ export default function Navigation({ currentView, isLoggedIn, isMenuOpen, onMenu
           </div>
           {isLoggedIn ? (
             <div className="flex flex-col gap-2 pt-4 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  onNavigate('dashboard')
+                  onMenuToggle()
+                }}
+                className="w-full px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors mb-1"
+              >
+                Dashboard
+              </button>
               <button
                 onClick={() => {
                   onNavigate('profile')

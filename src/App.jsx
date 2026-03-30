@@ -177,7 +177,7 @@ function App() {
     addToast("Thank you! We'll get back to you soon.", 'success')
   }, [addToast])
 
-  const shouldShowNav = !['billing', 'dashboard', 'login', 'profile', 'dataset-detail',
+  const shouldShowNav = !['billing', 'login', 'profile', 'dataset-detail',
     'dataset-upload', 'team', 'reports', 'settings', 'support'].includes(currentView)
     && typeof currentView === 'string'
 
