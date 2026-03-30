@@ -87,6 +87,7 @@ function App() {
         if (user) {
           setCurrentUser(user)
           setIsLoggedIn(true)
+          setCurrentView('dashboard')
           const { datasets: ds } = await API.getDatasets()
           setDatasets(ds || [])
         }

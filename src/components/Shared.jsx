@@ -233,7 +233,7 @@ export function TiltCard({ children, className = '', intensity = 10, onClick }) 
 }
 
 // Utility: SpotlightCard
-export function SpotlightCard({ children, className = '' }) {
+export function SpotlightCard({ children, className = '', onClick }) {
   const [x, setX] = useState(0);
   const [y, setY] = useState(0);
   const cardRef = useRef(null);
@@ -251,6 +251,7 @@ export function SpotlightCard({ children, className = '' }) {
       className={`spotlight ${className}`}
       style={{ '--x': `${x}px`, '--y': `${y}px` }}
       onMouseMove={handleMouseMove}
+      onClick={onClick}
     >
       {children}
     </div>

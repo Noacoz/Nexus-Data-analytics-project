@@ -1,6 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { CinematicText, FadeInUp, TiltCard, SpotlightCard, ParallaxElement } from '../Shared';
 
+const TypingText = ({ texts }) => {
+  const [index, setIndex] = React.useState(0);
+  const [displayed, setDisplayed] = React.useState('');
+  const [typing, setTyping] = React.useState(true);
+  React.useEffect(() => {
+    const current = texts[index];
+    if (typing) {
+      if (displayed.length < current.length) {
+        const t = setTimeout(() => setDisplayed(current.slice(0, displayed.length + 1)), 50);
+        return () => clearTimeout(t);
+      } else {
+        const t = setTimeout(() => setTyping(false), 1500);
+        return () => clearTimeout(t);
+      }
+    } else {
+      if (displayed.length > 0) {
+        const t = setTimeout(() => setDisplayed(displayed.slice(0, -1)), 30);
+        return () => clearTimeout(t);
+      } else {
+        setIndex((index + 1) % texts.length);
+        setTyping(true);
+      }
+    }
+  }, [displayed, typing, index, texts]);
+  return <span className="text-sm text-slate-300 font-mono">{displayed}<span className="animate-pulse text-indigo-400">|</span></span>;
+};
+
 const CompanyLogo = ({ company, color }) => (
   <div style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '0 2rem' }}>
     <div
@@ -99,20 +126,9 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, []);\n\n  const [chartType, setChartType] = React.useState('bar');\n  React.useEffect(() => {\n    const charts = ['bar', 'line', 'pie'];\n    let i = 0;\n    const interval = setInterval(() => {\n      i = (i + 1) % charts.length;\n      setChartType(charts[i]);\n    }, 3000);\n    return () => clearInterval(interval);\n  }, []);
 
-  const companies = [
-    { name: 'Stripe',     color: '#635bff' },
-    { name: 'Snowflake',  color: '#29b5e8' },
-    { name: 'Databricks', color: '#ff3621' },
-    { name: 'Airbnb',     color: '#ff5a5f' },
-    { name: 'Netflix',    color: '#e50914' },
-    { name: 'Spotify',    color: '#1ed760' },
-    { name: 'Uber',       color: '#000000' },
-    { name: 'Shopify',    color: '#96bf48' },
-  ];
-
-  return (
+  const companies = [\n    { name: 'Stripe',     color: '#635bff' },\n    { name: 'Snowflake',  color: '#29b5e8' },\n    { name: 'Databricks', color: '#ff3621' },\n    { name: 'Airbnb',     color: '#ff5a5f' },\n    { name: 'Netflix',    color: '#e50914' },\n    { name: 'Spotify',    color: '#1ed760' },\n    { name: 'Uber',       color: '#000000' },\n    { name: 'Shopify',    color: '#96bf48' },\n  ];\n\n  const conversation = [\n    { role: 'user', text: 'Show me top 5 products by revenue' },\n    { role: 'ai', text: 'Running query on your dataset...' },\n    { role: 'ai', text: 'Product A leads with $2.4M, up 23% this quarter.' },\n    { role: 'user', text: 'Any anomalies in the data?' },\n    { role: 'ai', text: 'Detected spike in returns on Day 14 — possible supply issue.' },\n    { role: 'user', text: 'Compare this month vs last month' },\n    { role: 'ai', text: 'Revenue up 18%, DAU up 31%. Strong growth signals.' },\n  ];\n  const [msgIndex, setMsgIndex] = React.useState(0);\n  const [visibleMessages, setVisibleMessages] = React.useState([conversation[0]]);\n  React.useEffect(() => {\n    const timer = setTimeout(() => {\n      const next = (msgIndex + 1) % conversation.length;\n      setMsgIndex(next);\n      setVisibleMessages(prev => {\n        const updated = [...prev, conversation[next]];\n        return updated.length > 4 ? updated.slice(-4) : updated;\n      });\n    }, 2000);\n    return () => clearTimeout(timer);\n  }, [msgIndex]);\n\n  return (
     <div className="relative">
 
       {/* ── HERO ─────────────────────────────────────────────── */}
@@ -126,12 +142,8 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
 
             {/* Animated Badge */}
             <FadeInUp delay={0.1}>
-              <div className="flex justify-center mb-6">
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full glass border border-indigo-500/30 text-sm">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-slate-300">Now with AI-powered insights</span>
-                  <span className="brand-gradient-text font-semibold">→ Try free</span>
-                </div>
+              <div className="flex justify-center mb-6 group cursor-pointer">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full glass border border-indigo-500/30 text-sm cursor-pointer transition-all duration-300 hover:border-yellow-400/60 hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:bg-yellow-400/5 group">\n                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />\n                  <span className="group-hover:text-yellow-300 transition-colors duration-300">Now with AI-powered insights</span>\n                  <span className="brand-gradient-text font-semibold group-hover:text-yellow-400 transition-colors duration-300">→ Try free</span>\n                </div>
               </div>
             </FadeInUp>
 
@@ -170,6 +182,42 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
               </div>
             </FadeInUp>
 
+            {/* Animated Dashboard Preview */}
+            <div className="relative mt-16 mx-auto max-w-4xl">
+              <div className="glass rounded-2xl border border-slate-700/50 overflow-hidden shadow-2xl">
+                {/* Mockup header bar */}
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700/50 bg-slate-900/80">
+                  <div className="w-3 h-3 rounded-full bg-red-500/70" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/70" />
+                  <div className="w-3 h-3 rounded-full bg-green-500/70" />
+                  <span className="ml-3 text-xs text-slate-500 font-mono">AURORA — Nexus Analytics</span>
+                  <div className="ml-auto flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-xs text-green-400">Live</span>
+                  </div>
+                </div>
+                {/* Mockup content */}
+                <div className="p-6 bg-slate-950/90">
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    {[
+                      { label: 'Datasets', value: '1,247', color: 'text-indigo-400', delay: '0s' },
+                      { label: 'Rows Analysed', value: '2.4M', color: 'text-cyan-400', delay: '0.2s' },
+                      { label: 'AI Insights', value: '8,391', color: 'text-purple-400', delay: '0.4s' },
+                    ].map((stat) => (
+                      <div key={stat.label} className="glass rounded-lg p-4 animate-fadeInUp" style={{ animationDelay: stat.delay }}>
+                        <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+                        <div className="text-xs text-slate-500 mt-1">{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* AI Conversation */}\n                  <div className="glass rounded-lg p-4 mb-4 h-32 overflow-hidden relative">\n                    <div className="text-xs text-slate-500 mb-2 flex items-center gap-1">\n                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />\n                      AURORA AI — Live\n                    </div>\n                    <div className="space-y-2 overflow-hidden">\n                      {visibleMessages.map((msg, i) => (\n                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fadeInUp`}>\n                          <div className={`px-3 py-1.5 rounded-lg text-xs max-w-[80%] ${\n                            msg.role === 'user'\n                              ? 'bg-indigo-600/40 text-indigo-200'\n                              : 'bg-slate-700/60 text-slate-300'\n                          }`}>\n                            {msg.role === 'ai' && <span className="text-cyan-400 font-semibold mr-1">AURORA:</span>}\n                            {msg.text}\n                          </div>\n                        </div>\n                      ))}\n                    </div>\n                  </div>
+                  {/* Cycling Charts */}\n                  <div className="glass rounded-lg p-4">\n                    <div className="flex items-center justify-between mb-3">\n                      <div className="text-xs text-slate-500">Analytics Overview</div>\n                      <div className="flex gap-1">\n                        {['bar', 'line', 'pie'].map((t) => (\n                          <div key={t} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${chartType === t ? 'bg-indigo-400' : 'bg-slate-600'}`} />\n                        ))}\n                      </div>\n                    </div>\n                    {chartType === 'bar' && (\n                      <div className="flex items-end gap-1.5 h-16">\n                        {[65, 85, 45, 92, 70, 55, 88, 73].map((h, i) => (\n                          <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-indigo-600 to-cyan-400 opacity-80 transition-all duration-500"\n                            style={{ height: `${h}%`, animationDelay: `${i * 0.1}s` }} />\n                        ))}\n                      </div>\n                    )}\n                    {chartType === 'line' && (\n                      <svg viewBox="0 0 200 60" className="w-full h-16">\n                        <defs>\n                          <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">\n                            <stop offset="0%" stopColor="#6366f1" />\n                            <stop offset="100%" stopColor="#06b6d4" />\n                          </linearGradient>\n                        </defs>\n                        <polyline points="0,50 25,35 50,40 75,20 100,30 125,15 150,25 175,10 200,20"\n                          fill="none" stroke="url(#lineGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />\n                        {[0,25,50,75,100,125,150,175,200].map((x, i) => {\n                          const ys = [50,35,40,20,30,15,25,10,20];\n                          return <circle key={i} cx={x} cy={ys[i]} r="3" fill="#06b6d4" opacity="0.8" />;\n                        })}\n                        <polyline points="0,50 25,35 50,40 75,20 100,30 125,15 150,25 175,10 200,20"\n                          fill="url(#lineGrad)" fillOpacity="0.1" stroke="none" />\n                      </svg>\n                    )}\n                    {chartType === 'pie' && (\n                      <div className="flex items-center gap-4 h-16">\n                        <svg viewBox="0 0 60 60" className="h-16 w-16 flex-shrink-0" style={{ transform: 'rotate(-90deg)' }}>\n                          <circle cx="30" cy="30" r="24" fill="none" stroke="#1e293b" strokeWidth="12" />\n                          <circle cx="30" cy="30" r="24" fill="none" stroke="#6366f1" strokeWidth="12"\n                            strokeDasharray="75 150" strokeDashoffset="0" />\n                          <circle cx="30" cy="30" r="24" fill="none" stroke="#06b6d4" strokeWidth="12"\n                            strokeDasharray="45 150" strokeDashoffset="-75" />\n                          <circle cx="30" cy="30" r="24" fill="none" stroke="#a855f7" strokeWidth="12"\n                            strokeDasharray="30 150" strokeDashoffset="-120" />\n                        </svg>\n                        <div className="flex flex-col gap-1 text-xs">\n                          {[['#6366f1','Revenue','50%'],['#06b6d4','Users','30%'],['#a855f7','Churn','20%']].map(([c,l,v]) => (\n                            <div key={l} className="flex items-center gap-1.5">\n                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c }} />\n                              <span className="text-slate-400">{l}</span>\n                              <span className="text-slate-300 font-medium ml-auto">{v}</span>\n                            </div>\n                          ))}\n                        </div>\n                      </div>\n                    )}\n                  </div>
+                </div>
+              </div>
+              {/* Glow effect under the mockup */}
+              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-3/4 h-16 bg-indigo-600/20 blur-2xl rounded-full" />
+            </div>
+
           </div>
         </div>
       </section>
@@ -191,6 +239,8 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
           </div>
         </div>
       </FadeInUp>
+
+      {/* ── TRUSTED BY ──────────────────────────────────────── */}
       <FadeInUp delay={0.5}>
         <section className="py-16 px-6 md:px-12 border-y border-slate-800">
           <div className="max-w-6xl mx-auto">
@@ -367,6 +417,8 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
           </FadeInUp>
         </div>
       </section>
+
+      {/* ── FEATURES ──────────────────────────────────────── */}
       <section className="py-20 px-6 md:px-12">
         <div className="max-w-6xl mx-auto">
 
