@@ -126,9 +126,54 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);\n\n  const [chartType, setChartType] = React.useState('bar');\n  React.useEffect(() => {\n    const charts = ['bar', 'line', 'pie'];\n    let i = 0;\n    const interval = setInterval(() => {\n      i = (i + 1) % charts.length;\n      setChartType(charts[i]);\n    }, 3000);\n    return () => clearInterval(interval);\n  }, []);
+  }, []);
 
-  const companies = [\n    { name: 'Stripe',     color: '#635bff' },\n    { name: 'Snowflake',  color: '#29b5e8' },\n    { name: 'Databricks', color: '#ff3621' },\n    { name: 'Airbnb',     color: '#ff5a5f' },\n    { name: 'Netflix',    color: '#e50914' },\n    { name: 'Spotify',    color: '#1ed760' },\n    { name: 'Uber',       color: '#000000' },\n    { name: 'Shopify',    color: '#96bf48' },\n  ];\n\n  const conversation = [\n    { role: 'user', text: 'Show me top 5 products by revenue' },\n    { role: 'ai', text: 'Running query on your dataset...' },\n    { role: 'ai', text: 'Product A leads with $2.4M, up 23% this quarter.' },\n    { role: 'user', text: 'Any anomalies in the data?' },\n    { role: 'ai', text: 'Detected spike in returns on Day 14 — possible supply issue.' },\n    { role: 'user', text: 'Compare this month vs last month' },\n    { role: 'ai', text: 'Revenue up 18%, DAU up 31%. Strong growth signals.' },\n  ];\n  const [msgIndex, setMsgIndex] = React.useState(0);\n  const [visibleMessages, setVisibleMessages] = React.useState([conversation[0]]);\n  React.useEffect(() => {\n    const timer = setTimeout(() => {\n      const next = (msgIndex + 1) % conversation.length;\n      setMsgIndex(next);\n      setVisibleMessages(prev => {\n        const updated = [...prev, conversation[next]];\n        return updated.length > 4 ? updated.slice(-4) : updated;\n      });\n    }, 2000);\n    return () => clearTimeout(timer);\n  }, [msgIndex]);\n\n  return (
+  const [chartType, setChartType] = React.useState('bar');
+  React.useEffect(() => {
+    const charts = ['bar', 'line', 'pie'];
+    let i = 0;
+    const interval = setInterval(() => {
+      i = (i + 1) % charts.length;
+      setChartType(charts[i]);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const companies = [
+    { name: 'Stripe',     color: '#635bff' },
+    { name: 'Snowflake',  color: '#29b5e8' },
+    { name: 'Databricks', color: '#ff3621' },
+    { name: 'Airbnb',     color: '#ff5a5f' },
+    { name: 'Netflix',    color: '#e50914' },
+    { name: 'Spotify',    color: '#1ed760' },
+    { name: 'Uber',       color: '#000000' },
+    { name: 'Shopify',    color: '#96bf48' },
+  ];
+
+  const conversation = [
+    { role: 'user', text: 'Show me top 5 products by revenue' },
+    { role: 'ai', text: 'Running query on your dataset...' },
+    { role: 'ai', text: 'Product A leads with $2.4M, up 23% this quarter.' },
+    { role: 'user', text: 'Any anomalies in the data?' },
+    { role: 'ai', text: 'Detected spike in returns on Day 14 — possible supply issue.' },
+    { role: 'user', text: 'Compare this month vs last month' },
+    { role: 'ai', text: 'Revenue up 18%, DAU up 31%. Strong growth signals.' },
+  ];
+  const [msgIndex, setMsgIndex] = React.useState(0);
+  const [visibleMessages, setVisibleMessages] = React.useState([conversation[0]]);
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      const next = (msgIndex + 1) % conversation.length;
+      setMsgIndex(next);
+      setVisibleMessages(prev => {
+        const updated = [...prev, conversation[next]];
+        return updated.length > 4 ? updated.slice(-4) : updated;
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [msgIndex]);
+
+  return (
     <div className="relative">
 
       {/* ── HERO ─────────────────────────────────────────────── */}
@@ -142,8 +187,12 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
 
             {/* Animated Badge */}
             <FadeInUp delay={0.1}>
-              <div className="flex justify-center mb-6 group cursor-pointer">
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full glass border border-indigo-500/30 text-sm cursor-pointer transition-all duration-300 hover:border-yellow-400/60 hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:bg-yellow-400/5 group">\n                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />\n                  <span className="group-hover:text-yellow-300 transition-colors duration-300">Now with AI-powered insights</span>\n                  <span className="brand-gradient-text font-semibold group-hover:text-yellow-400 transition-colors duration-300">→ Try free</span>\n                </div>
+              <div className="flex justify-center mb-6">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full glass border border-indigo-500/30 text-sm cursor-pointer transition-all duration-300 hover:border-yellow-400/60 hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:bg-yellow-400/5 group">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="group-hover:text-yellow-300 transition-colors duration-300">Now with AI-powered insights</span>
+                  <span className="brand-gradient-text font-semibold group-hover:text-yellow-400 transition-colors duration-300">→ Try free</span>
+                </div>
               </div>
             </FadeInUp>
 
@@ -210,8 +259,86 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
                       </div>
                     ))}
                   </div>
-                  {/* AI Conversation */}\n                  <div className="glass rounded-lg p-4 mb-4 h-32 overflow-hidden relative">\n                    <div className="text-xs text-slate-500 mb-2 flex items-center gap-1">\n                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />\n                      AURORA AI — Live\n                    </div>\n                    <div className="space-y-2 overflow-hidden">\n                      {visibleMessages.map((msg, i) => (\n                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fadeInUp`}>\n                          <div className={`px-3 py-1.5 rounded-lg text-xs max-w-[80%] ${\n                            msg.role === 'user'\n                              ? 'bg-indigo-600/40 text-indigo-200'\n                              : 'bg-slate-700/60 text-slate-300'\n                          }`}>\n                            {msg.role === 'ai' && <span className="text-cyan-400 font-semibold mr-1">AURORA:</span>}\n                            {msg.text}\n                          </div>\n                        </div>\n                      ))}\n                    </div>\n                  </div>
-                  {/* Cycling Charts */}\n                  <div className="glass rounded-lg p-4">\n                    <div className="flex items-center justify-between mb-3">\n                      <div className="text-xs text-slate-500">Analytics Overview</div>\n                      <div className="flex gap-1">\n                        {['bar', 'line', 'pie'].map((t) => (\n                          <div key={t} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${chartType === t ? 'bg-indigo-400' : 'bg-slate-600'}`} />\n                        ))}\n                      </div>\n                    </div>\n                    {chartType === 'bar' && (\n                      <div className="flex items-end gap-1.5 h-16">\n                        {[65, 85, 45, 92, 70, 55, 88, 73].map((h, i) => (\n                          <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-indigo-600 to-cyan-400 opacity-80 transition-all duration-500"\n                            style={{ height: `${h}%`, animationDelay: `${i * 0.1}s` }} />\n                        ))}\n                      </div>\n                    )}\n                    {chartType === 'line' && (\n                      <svg viewBox="0 0 200 60" className="w-full h-16">\n                        <defs>\n                          <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">\n                            <stop offset="0%" stopColor="#6366f1" />\n                            <stop offset="100%" stopColor="#06b6d4" />\n                          </linearGradient>\n                        </defs>\n                        <polyline points="0,50 25,35 50,40 75,20 100,30 125,15 150,25 175,10 200,20"\n                          fill="none" stroke="url(#lineGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />\n                        {[0,25,50,75,100,125,150,175,200].map((x, i) => {\n                          const ys = [50,35,40,20,30,15,25,10,20];\n                          return <circle key={i} cx={x} cy={ys[i]} r="3" fill="#06b6d4" opacity="0.8" />;\n                        })}\n                        <polyline points="0,50 25,35 50,40 75,20 100,30 125,15 150,25 175,10 200,20"\n                          fill="url(#lineGrad)" fillOpacity="0.1" stroke="none" />\n                      </svg>\n                    )}\n                    {chartType === 'pie' && (\n                      <div className="flex items-center gap-4 h-16">\n                        <svg viewBox="0 0 60 60" className="h-16 w-16 flex-shrink-0" style={{ transform: 'rotate(-90deg)' }}>\n                          <circle cx="30" cy="30" r="24" fill="none" stroke="#1e293b" strokeWidth="12" />\n                          <circle cx="30" cy="30" r="24" fill="none" stroke="#6366f1" strokeWidth="12"\n                            strokeDasharray="75 150" strokeDashoffset="0" />\n                          <circle cx="30" cy="30" r="24" fill="none" stroke="#06b6d4" strokeWidth="12"\n                            strokeDasharray="45 150" strokeDashoffset="-75" />\n                          <circle cx="30" cy="30" r="24" fill="none" stroke="#a855f7" strokeWidth="12"\n                            strokeDasharray="30 150" strokeDashoffset="-120" />\n                        </svg>\n                        <div className="flex flex-col gap-1 text-xs">\n                          {[['#6366f1','Revenue','50%'],['#06b6d4','Users','30%'],['#a855f7','Churn','20%']].map(([c,l,v]) => (\n                            <div key={l} className="flex items-center gap-1.5">\n                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c }} />\n                              <span className="text-slate-400">{l}</span>\n                              <span className="text-slate-300 font-medium ml-auto">{v}</span>\n                            </div>\n                          ))}\n                        </div>\n                      </div>\n                    )}\n                  </div>
+                  {/* AI Conversation */}
+                  <div className="glass rounded-lg p-4 mb-4 h-32 overflow-hidden relative">
+                    <div className="text-xs text-slate-500 mb-2 flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      AURORA AI — Live
+                    </div>
+                    <div className="space-y-2 overflow-hidden">
+                      {visibleMessages.map((msg, i) => (
+                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fadeInUp`}>
+                          <div className={`px-3 py-1.5 rounded-lg text-xs max-w-[80%] ${
+                            msg.role === 'user'
+                              ? 'bg-indigo-600/40 text-indigo-200'
+                              : 'bg-slate-700/60 text-slate-300'
+                          }`}>
+                            {msg.role === 'ai' && <span className="text-cyan-400 font-semibold mr-1">AURORA:</span>}
+                            {msg.text}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Cycling Charts */}
+                  <div className="glass rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="text-xs text-slate-500">Analytics Overview</div>
+                      <div className="flex gap-1">
+                        {['bar', 'line', 'pie'].map((t) => (
+                          <div key={t} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${chartType === t ? 'bg-indigo-400' : 'bg-slate-600'}`} />
+                        ))}
+                      </div>
+                    </div>
+                    {chartType === 'bar' && (
+                      <div className="flex items-end gap-1.5 h-16">
+                        {[65, 85, 45, 92, 70, 55, 88, 73].map((h, i) => (
+                          <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-indigo-600 to-cyan-400 opacity-80 transition-all duration-500"
+                            style={{ height: `${h}%`, animationDelay: `${i * 0.1}s` }} />
+                        ))}
+                      </div>
+                    )}
+                    {chartType === 'line' && (
+                      <svg viewBox="0 0 200 60" className="w-full h-16">
+                        <defs>
+                          <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#6366f1" />
+                            <stop offset="100%" stopColor="#06b6d4" />
+                          </linearGradient>
+                        </defs>
+                        <polyline points="0,50 25,35 50,40 75,20 100,30 125,15 150,25 175,10 200,20"
+                          fill="none" stroke="url(#lineGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        {[0,25,50,75,100,125,150,175,200].map((x, i) => {
+                          const ys = [50,35,40,20,30,15,25,10,20];
+                          return <circle key={i} cx={x} cy={ys[i]} r="3" fill="#06b6d4" opacity="0.8" />;
+                        })}
+                        <polyline points="0,50 25,35 50,40 75,20 100,30 125,15 150,25 175,10 200,20"
+                          fill="url(#lineGrad)" fillOpacity="0.1" stroke="none" />
+                      </svg>
+                    )}
+                    {chartType === 'pie' && (
+                      <div className="flex items-center gap-4 h-16">
+                        <svg viewBox="0 0 60 60" className="h-16 w-16 flex-shrink-0" style={{ transform: 'rotate(-90deg)' }}>
+                          <circle cx="30" cy="30" r="24" fill="none" stroke="#1e293b" strokeWidth="12" />
+                          <circle cx="30" cy="30" r="24" fill="none" stroke="#6366f1" strokeWidth="12"
+                            strokeDasharray="75 150" strokeDashoffset="0" />
+                          <circle cx="30" cy="30" r="24" fill="none" stroke="#06b6d4" strokeWidth="12"
+                            strokeDasharray="45 150" strokeDashoffset="-75" />
+                          <circle cx="30" cy="30" r="24" fill="none" stroke="#a855f7" strokeWidth="12"
+                            strokeDasharray="30 150" strokeDashoffset="-120" />
+                        </svg>
+                        <div className="flex flex-col gap-1 text-xs">
+                          {[['#6366f1','Revenue','50%'],['#06b6d4','Users','30%'],['#a855f7','Churn','20%']].map(([c,l,v]) => (
+                            <div key={l} className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c }} />
+                              <span className="text-slate-400">{l}</span>
+                              <span className="text-slate-300 font-medium ml-auto">{v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               {/* Glow effect under the mockup */}
@@ -563,3 +690,4 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
 };
 
 export default HomeView;
+
