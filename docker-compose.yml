@@ -13,6 +13,19 @@ services:
     volumes:
       - ./data:/data
 
+  analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile.analytics
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    depends_on:
+      - api
+
   web:
     build:
       context: .
@@ -21,7 +34,9 @@ services:
       - "5000:5000"
     depends_on:
       - api
+      - analytics
     environment:
       - API_KEY=${API_KEY:-}
     env_file:
       - .env
+

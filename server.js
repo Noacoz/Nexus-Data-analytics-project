@@ -546,6 +546,46 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+const ANALYTICS_URL = 'http://analytics:8001';
+const ANALYTICS_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || '';
+
+// Analytics proxy helper
+async function proxyToAnalytics(req, res, path, method = 'POST') {
+  try {
+    const opts = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Token': ANALYTICS_TOKEN
+      }
+    };
+    if (method !== 'GET' && req.body) opts.body = JSON.stringify(req.body);
+    const response = await fetch(`${ANALYTICS_URL}${path}`, opts);
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Analytics service unavailable', detail: err.message });
+  }
+}
+
+app.post('/api/nl-query/:datasetId', verifyToken, (req, res) =>
+  proxyToAnalytics(req, res, `/nl-query/${req.params.datasetId}`));
+
+app.post('/api/pipeline/bronze-to-silver/:datasetId', verifyToken, (req, res) =>
+  proxyToAnalytics(req, res, `/pipeline/bronze-to-silver/${req.params.datasetId}`));
+
+app.post('/api/model/build/:datasetId', verifyToken, (req, res) =>
+  proxyToAnalytics(req, res, `/model/build/${req.params.datasetId}`));
+
+app.get('/api/model/:datasetId', verifyToken, (req, res) =>
+  proxyToAnalytics(req, res, `/model/${req.params.datasetId}`, 'GET'));
+
+app.get('/api/drift/distribution/:datasetIdA/:datasetIdB', verifyToken, (req, res) =>
+  proxyToAnalytics(req, res, `/drift/distribution/${req.params.datasetIdA}/${req.params.datasetIdB}`, 'GET'));
+
+app.get('/api/schema/:datasetId', verifyToken, (req, res) =>
+  proxyToAnalytics(req, res, `/schema/${req.params.datasetId}`, 'GET'));
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });

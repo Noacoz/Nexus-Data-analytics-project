@@ -493,14 +493,6 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
               <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-3/4 h-16 bg-indigo-600/20 blur-2xl rounded-full" />
             </div>
 
-                      { label: 'Rows Analysed', value: '2.4M', color: 'text-cyan-400', delay: '0.2s' },
-                      { label: 'AI Insights', value: '8,391', color: 'text-purple-400', delay: '0.4s' },
-                    ].map((stat) => (
-                      <div key={stat.label} className="glass rounded-lg p-4 animate-fadeInUp" style={{ animationDelay: stat.delay }}>
-                        <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
-                        <div className="text-xs text-slate-500 mt-1">{stat.label}</div>
-                      </div>
-                    ))}
                   </div>
                   {/* AI Conversation */}
                   <div className="glass rounded-lg p-4 mb-4 h-32 overflow-hidden relative">
@@ -595,17 +587,21 @@ const HomeView = ({ onExplore, onGetStarted, setCurrentView }) => {
       {/* ── STATS STRIP ──────────────────────────────────────── */}
       <FadeInUp delay={0.4}>
         <div className="py-10 px-6 md:px-12 border-y border-slate-800/50">
-          <div className="max-w-6xl mx-auto grid grid-cols-3 gap-8 text-center">
-            {[
-              { number: '10,000+', label: 'Datasets analysed' },
-              { number: '500+', label: 'Teams worldwide' },
-              { number: '99.9%', label: 'Uptime SLA' },
-            ].map((stat, i) => (
-              <div key={i}>
-                <div className="text-3xl md:text-4xl font-bold brand-gradient-text mb-1">{stat.number}</div>
-                <div className="text-slate-400 text-sm">{stat.label}</div>
-              </div>
-            ))}
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
+              {[
+                { number: '10,000+', label: 'Datasets analysed' },
+                { number: '500+', label: 'Teams worldwide' },
+                { number: '99.9%', label: 'Uptime SLA' },
+                { number: '2.4M', label: 'Rows Analysed', color: 'text-cyan-400' },
+                { number: '8,391', label: 'AI Insights', color: 'text-purple-400' },
+              ].map((stat, i) => (
+                <div key={i} className="glass rounded-lg p-4">
+                  <div className={`text-2xl md:text-3xl font-bold ${stat.color || 'brand-gradient-text'} mb-1`}>{stat.number}</div>
+                  <div className="text-slate-400 text-sm">{stat.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </FadeInUp>
