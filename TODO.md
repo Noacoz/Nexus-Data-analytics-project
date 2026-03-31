@@ -1,9 +1,10 @@
-# HomeView Hero Edits
-- [ ] 1. Add chartType state + effect after scrollY useEffect
-- [ ] 2. Replace animated badge with full pill glow hover
-- [ ] 3. Replace bars chart with cycling charts component
-- [ ] 4. Add conversation state + effect before HomeView return
-- [ ] 5. Replace NL query with AI conversation animation
-- [ ] 6. Verify all edits successful
-- [ ] 7. Preview updated hero section
+# Cleanup HomeView.jsx TODO
 
+- [x] Create TODO.md with steps
+- [x] Identify exact strings for orphaned mockup block deletion using edit_file
+- [x] Identify exact strings for chartType state/useEffect deletion
+- [x] Execute edit_file with multiple diffs
+- [ ] Verify syntax with `npm run check` or vite build
+- [ ] Check line count with command
+- [ ] Confirm new preview and STATS STRIP are adjacent
+- [ ] attempt_completion
