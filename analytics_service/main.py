@@ -672,8 +672,8 @@ class NLQueryEngine:
         schema_str = "\n".join([f"- {col['column']} ({col['type']})" for col in schema])
         view_name = f"dataset_{model['dataset_id'].replace('-', '_')}"
 
-        measures_str = ", \".join(model.get('measures', []))
-        dimensions_str = ", \".join(model.get('dimensions', []))
+        measures_str = ', '.join(model.get('measures', []))
+        dimensions_str = ', '.join(model.get('dimensions', []))
         time_dim = model.get('time_dimension', 'none')
 
         prompt = f"""You are an expert DuckDB SQL engineer. Translate this question into a SINGLE valid DuckDB SQL SELECT statement.
@@ -696,8 +696,6 @@ CRITICAL RULES:
 - Use LIMIT 1000 for safety
 - Use standard SQL functions: COUNT, SUM, AVG, GROUP BY, ORDER BY, WHERE
 - Handle dates with DATE_TRUNC, DATE_PART if needed"""
-
-
     @staticmethod
     def translate_and_execute(dataset_id: str, question: str) -> dict:
         """Translate NL question -> SQL -> execute -> return results"""
