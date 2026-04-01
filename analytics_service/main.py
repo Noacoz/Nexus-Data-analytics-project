@@ -467,16 +467,16 @@ class DuckDBQueryEngine:
                     "error": "file_not_found",
                     "message": f"Parquet file not found: {parquet_path}"
                 }
-            
-        # Register Parquet as a named view (safe view name: hyphens → underscores)
-        view_name = f"dataset_{dataset_id.replace('-', '_')}"
-        self.conn.execute(
-            f"CREATE OR REPLACE VIEW {view_name} AS SELECT * FROM '{parquet_path}'"
-        )
-        # Execute the user's full SQL directly against the view
-        result = self.conn.execute(sql).fetchall()
-        columns = [desc[0] for desc in self.conn.description]
-            
+
+            # Register Parquet as a named view (safe view name: hyphens → underscores)
+            view_name = f"dataset_{dataset_id.replace('-', '_')}"
+            self.conn.execute(
+                f"CREATE OR REPLACE VIEW {view_name} AS SELECT * FROM '{parquet_path}'"
+            )
+            # Execute the user's full SQL directly against the view
+            result = self.conn.execute(sql).fetchall()
+            columns = [desc[0] for desc in self.conn.description]
+
             rows = []
             for row in result:
                 row_dict = {}
@@ -659,8 +659,94 @@ class SemanticModel:
         if not os.path.exists(model_path):
             return {"error": "model_not_found"}
         
-        with open(model_path, "r") as f:\n            return json.load(f)\n\n\nclass NLQueryEngine:\n    \"\"\"Natural language to SQL translation engine\"\"\"\n    \n    @staticmethod\n    def build_prompt(question: str, schema: list[dict], model: dict) -> str:\n        \"\"\"Build LLM prompt with schema and semantic model\"\"\"\n        schema_str = \"\\n\".join([f\"- {col['column']} ({col['type']})\" for col in schema])\n        view_name = f\"dataset_{model['dataset_id'].replace('-', '_')}\"\n        \n        measures_str = ', '.join(model.get('measures', []))\n        dimensions_str = ', '.join(model.get('dimensions', []))\n        time_dim = model.get('time_dimension', 'none')\n        \n        prompt = f\"\"\"You are an expert DuckDB SQL engineer. Translate this question into a SINGLE valid DuckDB SQL SELECT statement.\n\nTable to query: `{view_name}`\n\nSCHEMA:\n{schema_str}\n\nSEMANTIC MODEL:\n- MEASURES (numeric for aggregation): {measures_str}\n- DIMENSIONS (for GROUP BY): {dimensions_str}\n- TIME DIMENSION: {time_dim}\n\nQuestion: {question}\n\nCRITICAL RULES:\n- Return ONLY the SQL SELECT statement. NO explanation, NO markdown, NO backticks, NO ```sql\n- Table MUST be `{view_name}`\n- Use LIMIT 1000 for safety\n- Use standard SQL functions: COUNT, SUM, AVG, GROUP BY, ORDER BY, WHERE\n- Handle dates with DATE_TRUNC, DATE_PART if needed\"\"\"\n        \n        return prompt\n    \n    @staticmethod\n    def translate_and_execute(dataset_id: str, question: str) -> dict:\n        \"\"\"Translate NL question -> SQL -> execute -> return results\"\"\"\n        try:\n            # Load semantic model\n            model = SemanticModel.load_model(dataset_id)\n            if \"error\" in model:\n                return {\"success\": False, \"error\": \"model_not_found\"}\n            \n            # Get silver schema\n            pipeline = MedallionPipeline()\n            schema = pipeline.get_silver_schema(dataset_id)\n            \n            # Build prompt\n            prompt = NLQueryEngine.build_prompt(question, schema, model)\n            \n            # Groq API call\n            api_key = os.getenv(\"GROQ_API_KEY\")\n            if not api_key:\n                return {\"success\": False, \"error\": \"GROQ_API_KEY environment variable not set\"}\n            \n            with httpx.Client(timeout=30.0) as client:\n                response = client.post(\n                    \"https://api.groq.com/openai/v1/chat/completions\",\n                    headers={\n                        \"Authorization\": f\"Bearer {api_key}\",\n                        \"Content-Type\": \"application/json\"\n                    },\n                    json={\n                        \"model\": \"llama3-70b-8192\",\n                        \"messages\": [{\"role\": \"system\", \"content\": \"You are a SQL expert.\"}, {\"role\": \"user\", \"content\": prompt}],\n                        \"temperature\": 0.1,\n                        \"max_tokens\": 2000\n                    }\n                )\n                response.raise_for_status()\n                llm_response = response.json()\n                sql = llm_response[\"choices\"][0][\"message\"][\"content\"].strip()\n            \n            # Execute SQL\n            query_engine = DuckDBQueryEngine()\n            result = query_engine.execute_query(dataset_id, sql)\n            \n            return {\n                \"success\": True,\n                \"question\": question,\n                \"sql\": sql,\n                \"result\": result\n            }\n        except Exception as e:\n            return {\"success\": False, \"error\": str(e)}
+        with open(model_path, "r") as f:
+            return json.load(f)
 
+
+class NLQueryEngine:
+    """Natural language to SQL translation engine"""
+
+    @staticmethod
+    def build_prompt(question: str, schema: list[dict], model: dict) -> str:
+        """Build LLM prompt with schema and semantic model"""
+        schema_str = "\n".join([f"- {col['column']} ({col['type']})" for col in schema])
+        view_name = f"dataset_{model['dataset_id'].replace('-', '_')}"
+
+        measures_str = ", \".join(model.get('measures', []))
+        dimensions_str = ", \".join(model.get('dimensions', []))
+        time_dim = model.get('time_dimension', 'none')
+
+        prompt = f"""You are an expert DuckDB SQL engineer. Translate this question into a SINGLE valid DuckDB SQL SELECT statement.
+
+Table to query: `{view_name}`
+
+SCHEMA:
+{schema_str}
+
+SEMANTIC MODEL:
+- MEASURES (numeric for aggregation): {measures_str}
+- DIMENSIONS (for GROUP BY): {dimensions_str}
+- TIME DIMENSION: {time_dim}
+
+Question: {question}
+
+CRITICAL RULES:
+- Return ONLY the SQL SELECT statement. NO explanation, NO markdown, NO backticks, NO ```sql
+- Table MUST be `{view_name}`
+- Use LIMIT 1000 for safety
+- Use standard SQL functions: COUNT, SUM, AVG, GROUP BY, ORDER BY, WHERE
+- Handle dates with DATE_TRUNC, DATE_PART if needed"""
+
+
+    @staticmethod
+    def translate_and_execute(dataset_id: str, question: str) -> dict:
+        """Translate NL question -> SQL -> execute -> return results"""
+        try:
+            model = SemanticModel.load_model(dataset_id)
+            if "error" in model:
+                return {"success": False, "error": "model_not_found"}
+
+            pipeline = MedallionPipeline()
+            schema = pipeline.get_silver_schema(dataset_id)
+
+            prompt = NLQueryEngine.build_prompt(question, schema, model)
+
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                return {"success": False, "error": "GROQ_API_KEY environment variable not set"}
+
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "llama3-70b-8192",
+                        "messages": [
+                            {"role": "system", "content": "You are a SQL expert."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 2000
+                    }
+                )
+                response.raise_for_status()
+                llm_response = response.json()
+                sql = llm_response["choices"][0]["message"]["content"].strip()
+
+            query_engine = DuckDBQueryEngine()
+            result = query_engine.execute_query(dataset_id, sql)
+
+            return {
+                "success": True,
+                "question": question,
+                "sql": sql,
+                "result": result
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
 def write_parquet(dataset_id: str, df: pd.DataFrame) -> str:
     """Write DataFrame to Parquet bronze layer"""
