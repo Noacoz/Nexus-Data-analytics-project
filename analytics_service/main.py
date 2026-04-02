@@ -40,14 +40,43 @@ app.add_middleware(
 )
 
 # Database connection pool
-db_pool = SimpleConnectionPool(
-    1, 20,
-    database=os.getenv("DATABASE_NAME", "nexus"),
-    user=os.getenv("DATABASE_USER", "postgres"),
-    password=os.getenv("DATABASE_PASSWORD", "postgres"),
-    host=os.getenv("DATABASE_HOST", "localhost"),
-    port=int(os.getenv("DATABASE_PORT", 5432))
-)
+# Lazy initialize so FastAPI can start even if the database is temporarily unavailable.
+db_pool = None
+
+def initialize_db_pool():
+    global db_pool
+    if db_pool is not None:
+        return
+
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        db_pool = SimpleConnectionPool(1, 20, dsn=database_url)
+        return
+
+    db_pool = SimpleConnectionPool(
+        1, 20,
+        database=os.getenv("DATABASE_NAME", "nexus"),
+        user=os.getenv("DATABASE_USER", "postgres"),
+        password=os.getenv("DATABASE_PASSWORD", "postgres"),
+        host=os.getenv("DATABASE_HOST", "localhost"),
+        port=int(os.getenv("DATABASE_PORT", 5432))
+    )
+
+
+def get_db_connection():
+    """Get database connection from pool"""
+    try:
+        initialize_db_pool()
+        return db_pool.getconn()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"DB connection unavailable: {e}")
+
+
+def release_db_connection(conn):
+    """Release database connection back to pool"""
+    if conn is None:
+        return
+    db_pool.putconn(conn)
 
 
 class NexusAnalyticsEngine:
@@ -759,17 +788,6 @@ def write_parquet(dataset_id: str, df: pd.DataFrame) -> str:
     except Exception as e:
         logger.error(f"Parquet write failed for {dataset_id}: {str(e)}")
         raise
-
-
-def get_db_connection():
-    """Get database connection from pool"""
-    return db_pool.getconn()
-
-
-
-def release_db_connection(conn):
-    """Release database connection back to pool"""
-    db_pool.putconn(conn)
 
 
 @app.get("/health")
