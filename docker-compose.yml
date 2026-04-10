@@ -16,20 +16,7 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    ports:
-      - "4000:4000"
-    environment:
-      - API_KEY=${API_KEY:-}
-    env_file:
-      - .env
-    volumes:
-      - ./data:/data
-    depends_on:
-      - db
+
 
   analytics:
     build:
@@ -39,10 +26,11 @@ services:
       - "8001:8001"
     env_file:
       - .env
+    environment:
+      - ANALYTICS_API_KEY=${ANALYTICS_API_KEY:-dev-key-nexus-local}
     volumes:
       - ./data:/data
     depends_on:
-      - api
       - db
 
   web:
@@ -52,7 +40,6 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      - api
       - analytics
       - db
     environment:

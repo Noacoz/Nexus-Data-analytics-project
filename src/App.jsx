@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import API from './lib/api'
 import Navigation from './components/Navigation'
+import CommandPalette from './components/CommandPalette'
 import { Footer, LoadingOverlay, ToastContainer, AuroraBackground, FilmGrainOverlay } from './components/Shared'
 import ChatBot from './components/ChatBot'
 import AIChatbot from './components/AIChatbot'
@@ -40,6 +41,7 @@ function App() {
   const [selectedPlan, setSelectedPlan] = useState(null)
   const [showTrialBanner, setShowTrialBanner] = useState(true)
   const [showChatbot, setShowChatbot] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [workspaceSettings, setWorkspaceSettings] = useState({})
   const [viewHistory, setViewHistory] = useState([])
   const [isDarkMode, setIsDarkMode] = useState(true)
@@ -96,6 +98,17 @@ function App() {
     }
     init()
   }, [])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        if (isLoggedIn) setPaletteOpen(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isLoggedIn])
 
   const addToast = useCallback((message, type = 'info', duration = 4000) => {
     const id = Date.now()
@@ -224,6 +237,7 @@ function App() {
           onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
           onNavigate={handleViewChange}
           onLogout={handleLogout}
+          onOpenPalette={() => setPaletteOpen(true)}
         />
       )}
 
@@ -253,6 +267,13 @@ function App() {
 
       {/* Global floating ChatBot (persistent bubble) */}
       <ChatBot />
+
+      <CommandPalette
+        isOpen={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={handleViewChange}
+        datasets={datasets}
+      />
 
     </div>
   )

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Nexus Analytics Engine - FastAPI Service
 Pure statistical computation service - NO LLM calls
 """
@@ -17,6 +17,17 @@ import os
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 import logging
+import os
+from fastapi import HTTPException, Security, Depends
+from fastapi.security import APIKeyHeader
+
+API_KEY = os.getenv("ANALYTICS_API_KEY", "dev-key-nexus-local")
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
+    if api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return api_key
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -304,7 +315,7 @@ class NexusAnalyticsEngine:
                 else:
                     direction = "downward"
                 
-                # Strength based on R²
+                # Strength based on RÂ²
                 if r2 > 0.7:
                     strength = "strong"
                 elif r2 > 0.4:
@@ -497,7 +508,7 @@ class DuckDBQueryEngine:
                     "message": f"Parquet file not found: {parquet_path}"
                 }
 
-            # Register Parquet as a named view (safe view name: hyphens → underscores)
+            # Register Parquet as a named view (safe view name: hyphens â†’ underscores)
             view_name = f"dataset_{dataset_id.replace('-', '_')}"
             self.conn.execute(
                 f"CREATE OR REPLACE VIEW {view_name} AS SELECT * FROM '{parquet_path}'"
@@ -800,7 +811,7 @@ async def health():
 
 
 @app.post("/analyze/dataset/{dataset_id}")
-async def analyze_dataset(dataset_id: str):
+async def analyze_dataset(dataset_id: str, api_key: str = Depends(verify_api_key)):
     """Fetch dataset rows and run full analytics"""
     try:
         conn = get_db_connection()
@@ -865,7 +876,7 @@ async def analyze_dataset(dataset_id: str):
 
 
 @app.post("/analyze/inline")
-async def analyze_inline(request_data: dict):
+async def analyze_inline(request_data: dict, api_key: str = Depends(verify_api_key)):
     """Analyze provided rows without database fetch"""
     try:
         rows = request_data.get("rows", [])
@@ -882,7 +893,7 @@ async def analyze_inline(request_data: dict):
 
 
 @app.get("/snapshot/{dataset_id}/latest")
-async def get_latest_snapshot(dataset_id: str):
+async def get_latest_snapshot(dataset_id: str, api_key: str = Depends(verify_api_key)):
     """Fetch latest snapshot for dataset"""
     try:
         conn = get_db_connection()
@@ -927,7 +938,7 @@ async def get_latest_snapshot(dataset_id: str):
 
 
 @app.get("/schema/{dataset_id}")
-async def get_dataset_schema(dataset_id: str):
+async def get_dataset_schema(dataset_id: str, api_key: str = Depends(verify_api_key)):
     """Get Parquet dataset schema"""
     engine = DuckDBQueryEngine()
     schema = engine.get_schema(dataset_id)
@@ -939,7 +950,7 @@ async def get_dataset_schema(dataset_id: str):
 
 
 @app.post("/drift/{dataset_id}")
-async def detect_drift(dataset_id: str):
+async def detect_drift(dataset_id: str, api_key: str = Depends(verify_api_key)):
     """Detect statistical drift between snapshots"""
     try:
         conn = get_db_connection()
@@ -1075,12 +1086,12 @@ def compute_distribution_drift(dataset_id_a: str, dataset_id_b: str) -> dict:
 
 
 @app.get("/drift/distribution/{dataset_id_a}/{dataset_id_b}")
-async def distribution_drift(dataset_id_a: str, dataset_id_b: str):
+async def distribution_drift(dataset_id_a: str, dataset_id_b: str, api_key: str = Depends(verify_api_key)):
     """Distribution-level drift detection using KS test on silver Parquet datasets"""
     return compute_distribution_drift(dataset_id_a, dataset_id_b)
 
 @app.post("/pipeline/bronze-to-silver/{dataset_id}")
-async def bronze_to_silver_endpoint(dataset_id: str):
+async def bronze_to_silver_endpoint(dataset_id: str, api_key: str = Depends(verify_api_key)):
     """Convert bronze to silver layer"""
     pipeline = MedallionPipeline()
     result = pipeline.bronze_to_silver(dataset_id)
@@ -1088,7 +1099,7 @@ async def bronze_to_silver_endpoint(dataset_id: str):
 
 
 @app.post("/nl-query/{dataset_id}")
-async def nl_query(dataset_id: str, request_data: dict):
+async def nl_query(dataset_id: str, request_data: dict, api_key: str = Depends(verify_api_key)):
     """
     Natural language query endpoint
     POST /nl-query/my-dataset
@@ -1102,15 +1113,16 @@ async def nl_query(dataset_id: str, request_data: dict):
     return result
 
 @app.post("/model/build/{dataset_id}")
-async def build_model_endpoint(dataset_id: str):
+async def build_model_endpoint(dataset_id: str, api_key: str = Depends(verify_api_key)):
     model = SemanticModel.build_model(dataset_id)
     return model
 
 @app.get("/model/{dataset_id}")
-async def load_model_endpoint(dataset_id: str):
+async def load_model_endpoint(dataset_id: str, api_key: str = Depends(verify_api_key)):
     model = SemanticModel.load_model(dataset_id)
     return model
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
+

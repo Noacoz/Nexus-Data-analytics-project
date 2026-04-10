@@ -499,7 +499,7 @@ app.post('/api/billing/confirm-payment', verifyToken, async (req, res) => {
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', verifyToken, async (req, res) => {
   const { messages, system } = req.body;
   if (!messages || !Array.isArray(messages) || messages.length === 0)
     return res.status(400).json({ error: 'messages array is required' });

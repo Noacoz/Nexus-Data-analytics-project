@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from './Shared'
 
-export default function Navigation({ currentView, isLoggedIn, isMenuOpen, onMenuToggle, onNavigate, onLogout }) {
+export default function Navigation({ currentView, isLoggedIn, isMenuOpen, onMenuToggle, onNavigate, onLogout, onOpenPalette }) {
   const navItems = [
     { label: 'Home', view: 'home' },
     { label: 'Use Cases', view: 'usecases' },
@@ -57,6 +57,12 @@ export default function Navigation({ currentView, isLoggedIn, isMenuOpen, onMenu
               <>
                 <button onClick={() => onNavigate('dashboard')} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors">
                   Dashboard
+                </button>
+                <button
+                  onClick={onOpenPalette}
+                  className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 border border-slate-700 hover:border-slate-500 hover:text-slate-300 transition-all"
+                >
+                  <span>⌘K</span>
                 </button>
                 <button
                   onClick={() => onNavigate('profile')}
