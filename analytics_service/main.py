@@ -410,53 +410,94 @@ class NexusAnalyticsEngine:
         """Compute system confidence ceiling"""
         sample_score = min(1.0, self.n_rows / 500)
         quality_score = data_quality["overall_score"]
-        numeric_ratio = len(self.numeric_cols) / len(self.df.columns)
+        numeric_ratio = len(self.numeric_cols) / len(self.df.columns) if len(self.df.columns) > 0 else 0.0
         
         confidence = (sample_score * 0.5) + (quality_score * 0.35) + (numeric_ratio * 0.15)
         
         # Cap at 0.97
         return min(0.97, float(confidence))
+
+    def _confidence_label(self, confidence: float) -> str:
+        if confidence >= 0.8:
+            return "High"
+        if confidence >= 0.6:
+            return "Medium"
+        return "Low"
     
     def generate_top_findings(self, col_stats: Dict, correlations: Dict, trends: Dict, anomalies: Dict) -> List[Dict]:
         """Synthesize top 10 findings"""
         findings = []
+        confidence_base = self.confidence_base or 0.6
         
         # Strong correlations
         for corr in correlations.get("strong_correlations", [])[:3]:
+            score = min(0.97, 0.7 + abs(corr["r"]) * 0.2)
             findings.append({
                 "type": "correlation",
                 "title": f"Strong correlation between {corr['columns'][0]} and {corr['columns'][1]}",
-                "r_value": corr["r"],
-                "direction": corr["direction"]
+                "explanation": (
+                    f"The dataset shows a {corr['direction']} correlation between {corr['columns'][0]} and {corr['columns'][1]} "
+                    f"(Pearson r = {corr['r']:.2f}, p = {corr['p_value']:.3f}). This suggests the two variables move together in the current sample."
+                ),
+                "evidence": {
+                    "correlation_coefficient": corr["r"],
+                    "p_value": corr["p_value"],
+                    "sample_size": corr["sample_size"]
+                },
+                "confidence": score,
+                "confidence_label": self._confidence_label(score)
             })
         
-        # Strong trends
+        # Trends
         for col, trend_data in trends.items():
             if trend_data["strength"] in ["strong", "moderate"]:
+                score = min(0.97, 0.65 + abs(trend_data["r_squared"]) * 0.25)
                 findings.append({
                     "type": "trend",
-                    "title": f"{col} shows {trend_data['strength']} {trend_data['direction']} trend",
-                    "r_squared": trend_data["r_squared"],
-                    "pct_change": trend_data["pct_change"]
+                    "title": f"{col} shows a {trend_data['strength']} {trend_data['direction']} trend",
+                    "explanation": (
+                        f"Over the dataset, {col} moves {trend_data['direction']} with an estimated change of "
+                        f"{trend_data['pct_change']:.1f}% and R² = {trend_data['r_squared']:.2f}. "
+                        f"The trend is {trend_data['strength']} based on the linear fit."
+                    ),
+                    "evidence": {
+                        "slope": trend_data["slope"],
+                        "r_squared": trend_data["r_squared"],
+                        "pct_change": trend_data["pct_change"]
+                    },
+                    "confidence": score,
+                    "confidence_label": self._confidence_label(score)
                 })
-        
-        # Data quality warnings
-        dq = self.compute_data_quality()
-        if dq["overall_score"] < 0.7:
-            findings.append({
-                "type": "data_quality",
-                "title": f"Data quality is {dq['quality_label'].lower()}",
-                "score": dq["overall_score"]
-            })
         
         # Anomalies
         for anomaly in anomalies.get("extreme_values", [])[:2]:
+            score = min(0.97, 0.65 + 0.15)
             findings.append({
                 "type": "anomaly",
                 "title": f"Extreme value detected in {anomaly['column']}",
-                "severity": anomaly["severity"]
+                "explanation": (
+                    f"An extreme value of {anomaly['value']:.2f} was detected in {anomaly['column']} with a z-score of "
+                    f"{anomaly['z_score']:.2f}. This observation may reflect an outlier or a true event that warrants review."
+                ),
+                "evidence": anomaly,
+                "confidence": score,
+                "confidence_label": self._confidence_label(score)
             })
-        
+
+        for anomaly in anomalies.get("high_missing_data", [])[:2]:
+            score = min(0.97, 0.65 + 0.1)
+            findings.append({
+                "type": "anomaly",
+                "title": f"High missing data in {anomaly['column']}",
+                "explanation": (
+                    f"{anomaly['null_pct']:.0%} of values are missing in {anomaly['column']}, which may bias analysis. "
+                    f"Consider imputing or validating the source values."
+                ),
+                "evidence": anomaly,
+                "confidence": score,
+                "confidence_label": self._confidence_label(score)
+            })
+
         return findings[:10]
     
     def run(self) -> Dict[str, Any]:

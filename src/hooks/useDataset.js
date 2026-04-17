@@ -112,13 +112,17 @@ export function useDataset() {
 
       try {
         const result = await uploadDataset(file, userId);
-        setDataset(result);
-        setStatus(result.status);
+        const datasetObject = result.dataset || result;
+        setDataset(datasetObject);
+        setStatus(datasetObject.status || 'processing');
 
-        // Start polling for completion
-        startPolling(result.dataset_id);
+        const datasetId = datasetObject.id || datasetObject.dataset_id;
+        if (datasetId) {
+          // Start polling for completion
+          startPolling(datasetId);
+        }
 
-        return result.dataset_id;
+        return datasetId;
       } catch (err) {
         setError(err.message);
         throw err;

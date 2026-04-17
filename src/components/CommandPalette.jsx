@@ -2,8 +2,16 @@ import React, { useState, useEffect, useRef } from 'react'
 
 const COMMANDS = [
   { id: 'nav-dashboard', label: 'Go to Dashboard', icon: '📊', category: 'Navigation', action: 'navigate', target: 'dashboard' },
-  { id: 'nav-upload', label: 'Upload Dataset', icon: '📤', category: 'Navigation', action: 'navigate', target: 'dataset-upload' },
+  { id: 'nav-datasets', label: 'Open Datasets', icon: '🗂️', category: 'Navigation', action: 'navigate', target: 'datasets' },
+  { id: 'nav-data-explorer', label: 'Open Data Explorer', icon: '🧭', category: 'Navigation', action: 'navigate', target: 'data-explorer' },
+  { id: 'nav-analysis', label: 'Open Analysis / Models', icon: '📈', category: 'Navigation', action: 'navigate', target: 'analysis' },
+  { id: 'nav-ai-analyst', label: 'Open AI Analyst', icon: '🤖', category: 'Navigation', action: 'navigate', target: 'ai-analyst' },
+  { id: 'nav-insights', label: 'Open Insights', icon: '💡', category: 'Navigation', action: 'navigate', target: 'insights' },
   { id: 'nav-reports', label: 'View Reports', icon: '📋', category: 'Navigation', action: 'navigate', target: 'reports' },
+  { id: 'nav-monitoring', label: 'Open Monitoring', icon: '🚨', category: 'Navigation', action: 'navigate', target: 'monitoring' },
+  { id: 'nav-workflows', label: 'Open Workflows', icon: '⚙️', category: 'Navigation', action: 'navigate', target: 'workflows' },
+  { id: 'nav-system-logs', label: 'View System Logs', icon: '📝', category: 'Navigation', action: 'navigate', target: 'system-logs' },
+  { id: 'nav-audit', label: 'Open Audit', icon: '🔎', category: 'Navigation', action: 'navigate', target: 'audit' },
   { id: 'nav-settings', label: 'Open Settings', icon: '⚙️', category: 'Navigation', action: 'navigate', target: 'settings' },
   { id: 'nav-team', label: 'Manage Team', icon: '👥', category: 'Navigation', action: 'navigate', target: 'team' },
   { id: 'nav-profile', label: 'My Profile', icon: '👤', category: 'Navigation', action: 'navigate', target: 'profile' },

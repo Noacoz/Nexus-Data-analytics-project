@@ -30,7 +30,7 @@ export async function uploadDataset(file, userId) {
     const response = await apiClient.post("/datasets/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-    return response.data;
+    return response.data.dataset || response.data;
   } catch (error) {
     throw new Error(error.response?.data?.error || "Upload failed");
   }

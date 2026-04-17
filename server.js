@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ANALYTICS — GATEWAY SERVER (CANONICAL CLEAN VERSION v3.1)
  * Stack: Express 4 + Supabase + Groq llama-3.3-70b + ioredis
  */
@@ -10,6 +10,7 @@ import multer       from 'multer';
 import { parse as csvParse }             from 'csv-parse/sync';
 import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
 import Redis        from 'ioredis';
+import rateLimit    from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@supabase/supabase-js';
 import cookieParser from 'cookie-parser';
@@ -58,8 +59,66 @@ const fileUpload = multer({
 const app = express();
 
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
+
+// Rate limiters
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again in 15 minutes.' }
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'AI query rate limit exceeded, please wait a moment.' }
+});
+
+app.use(globalLimiter);
+app.use('/auth/signin', authLimiter);
+app.use('/auth/signup', authLimiter);
+app.use('/api/nl-query', aiLimiter);
+app.use('/api/chat', aiLimiter);
+
+// Cache middleware
+const cacheMiddleware = (duration = 300) => {
+  return async (req, res, next) => {
+    if (req.method !== 'GET') return next();
+    const key = `cache:${req.originalUrl || req.url}`;
+    try {
+      const cached = await redis.get(key);
+      if (cached) {
+        res.setHeader('X-Cache', 'HIT');
+        return res.json(JSON.parse(cached));
+      }
+      res.setHeader('X-Cache', 'MISS');
+      const originalJson = res.json;
+      res.json = function(data) {
+        redis.setex(key, duration, JSON.stringify(data)).catch(err => console.warn('[Cache] set error:', err.message));
+        originalJson.call(this, data);
+      };
+      next();
+    } catch (err) {
+      console.warn('[Cache] error:', err.message);
+      next();
+    }
+  };
+};
+
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const signToken = (user) =>
@@ -99,32 +158,98 @@ function parseFile(buffer, mimetype, originalname) {
   throw new Error('Unsupported file format. Use CSV, Excel (.xlsx), or JSON.');
 }
 
-async function generateDatasetInsights(datasetId, datasetName, fileFormat, userId) {
-  try {
-    const prompt = `You are a senior data analyst. A user uploaded a dataset called "${datasetName}" (${fileFormat} format) to Nexus Analytics. Generate exactly 4 realistic, specific AI insights. Return ONLY a valid JSON array — no markdown, no explanation, no code fences:
-[
-  {"title":"specific title","content":"Two concrete data-driven sentences.","type":"trend","border_color":"cyan"},
-  {"title":"specific title","content":"Two concrete data-driven sentences.","type":"anomaly","border_color":"purple"},
-  {"title":"specific title","content":"Two concrete data-driven sentences.","type":"recommendation","border_color":"green"},
-  {"title":"specific title","content":"Two concrete data-driven sentences.","type":"pattern","border_color":"yellow"}
-]`;
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], max_tokens: 700, stream: false, temperature: 0.7 }),
-    });
-    if (!groqRes.ok) throw new Error(`Groq API returned ${groqRes.status}`);
-    const groqData = await groqRes.json();
-    const raw = groqData.choices?.[0]?.message?.content || '[]';
-    const insights = JSON.parse(raw.replace(/```json|```/gi, '').trim());
-    if (!Array.isArray(insights) || insights.length === 0) throw new Error('Invalid insights array');
-    await supabase.from('insights').insert(insights.map((i) => ({ dataset_id: datasetId, ...i })));
-    await supabase.from('notifications').insert({ user_id: userId, title: 'AI insights ready', message: `${insights.length} insights generated for "${datasetName}". Click to view.`, type: 'insight' });
-  } catch (err) {
-    console.error('[Insights] Generation failed:', err.message);
-    await supabase.from('insights').insert([{ dataset_id: datasetId, title: 'Dataset processed successfully', content: 'Your dataset has been uploaded and is ready for analysis.', type: 'general', border_color: 'cyan' }]);
+async function insertDatasetRows(datasetId, rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return;
+
+  const batchSize = 250;
+  for (let offset = 0; offset < rows.length; offset += batchSize) {
+    const batch = rows.slice(offset, offset + batchSize).map((row, index) => ({
+      dataset_id: datasetId,
+      row_index: offset + index,
+      data: row,
+    }));
+    const { error } = await supabase.from('dataset_rows').insert(batch);
+    if (error) throw error;
   }
 }
+
+function mapConfidenceLabel(confidence) {
+  if (confidence >= 0.8) return 'High';
+  if (confidence >= 0.6) return 'Medium';
+  return 'Low';
+}
+
+async function createInsightsFromAnalysis(datasetId, snapshotId, analysisResult, userId) {
+  const findings = Array.isArray(analysisResult.top_findings) ? analysisResult.top_findings : [];
+
+  const insights = findings
+    .filter((finding) => finding && ['trend', 'anomaly', 'correlation'].includes(finding.type))
+    .map((finding) => {
+      const confidence = typeof finding.confidence === 'number' ? Math.max(0, Math.min(0.97, finding.confidence)) : Math.max(0, Math.min(0.97, analysisResult.confidence_base || 0.0));
+      return {
+        dataset_id: datasetId,
+        snapshot_id: snapshotId || null,
+        user_id: userId,
+        trigger_type: 'auto',
+        insight_type: finding.type,
+        title: finding.title,
+        explanation: finding.explanation || finding.title,
+        confidence,
+        confidence_label: finding.confidence_label || mapConfidenceLabel(confidence),
+        assumptions: finding.assumptions || { source: 'deterministic analytics' },
+        limitations: finding.limitations || [],
+        hypotheses: finding.hypotheses || [],
+        evidence: finding.evidence || {},
+        recommended_actions: finding.recommended_actions || [],
+        reasoning_trace: finding.reasoning_trace || { source: 'analytics_engine' },
+        is_proactive: false,
+      };
+    });
+
+  if (insights.length === 0) {
+    console.info(`[Analytics] dataset ${datasetId} processed with no trend/correlation/anomaly insights generated.`);
+    return;
+  }
+
+  await supabase.from('insights').insert(insights);
+  await supabase.from('notifications').insert({
+    user_id: userId,
+    title: 'Dataset analytics complete',
+    message: `${insights.length} structured insights are now available for your dataset.`,
+    type: 'insight',
+  }).catch(console.error);
+}
+
+async function processDatasetAsync(datasetId, userId) {
+  try {
+    const analyticsUrl = `${ANALYTICS_URL}/analyze/dataset/${datasetId}`;
+    const response = await fetch(analyticsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': ANALYTICS_TOKEN,
+      },
+    });
+    const analysisResult = await response.json();
+
+    if (!response.ok) {
+      throw new Error(analysisResult.detail || analysisResult.error || JSON.stringify(analysisResult));
+    }
+
+    await createInsightsFromAnalysis(datasetId, analysisResult.snapshot_id, analysisResult, userId);
+    await supabase.from('datasets').update({ status: 'ready', processed_at: new Date().toISOString() }).eq('id', datasetId);
+  } catch (err) {
+    console.error('[Dataset Processing] failed for', datasetId, err.message || err);
+    await supabase.from('datasets').update({ status: 'error' }).eq('id', datasetId);
+    await supabase.from('notifications').insert({
+      user_id: userId,
+      title: 'Dataset processing failed',
+      message: `Analytics processing failed for dataset ${datasetId}. Please retry or contact support.`,
+      type: 'system',
+    }).catch(console.error);
+  }
+}
+
 
 const NEXUS_SYSTEM_PROMPT = `You are Nex — a senior data analytics engineer embedded inside Nexus Analytics. You have deep expertise in data engineering, statistical analysis, business intelligence, and machine learning. You think like a principal data scientist, communicate like a trusted colleague, and you get straight to what matters.
 
@@ -202,7 +327,9 @@ BAD: Asking two questions in one reply
 
 // ROUTES
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
+app.get('/api/health', cacheMiddleware(30), (_req, res) => {
+  res.json({ status: 'ok', ts: new Date().toISOString() });
+});
 
 app.post('/auth/signup', async (req, res) => {
   try {
@@ -334,13 +461,50 @@ app.get('/api/datasets', verifyToken, async (req, res) => {
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 
+app.get('/api/datasets/:id/status', verifyToken, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('datasets').select('*').eq('id', req.params.id).eq('user_id', req.user.id).single();
+    if (error) throw error;
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/datasets/:id/snapshot', verifyToken, async (req, res) => {
+  try {
+    const response = await fetch(`${ANALYTICS_URL}/snapshot/${req.params.id}/latest`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': ANALYTICS_TOKEN,
+      },
+    });
+    const snapshot = await response.json();
+    return res.status(response.status).json(snapshot);
+  } catch (err) {
+    return res.status(500).json({ error: 'Snapshot service unavailable', detail: err.message });
+  }
+});
+
 app.post('/api/datasets', verifyToken, async (req, res) => {
   try {
     const { name, file_format, row_count, file_size, description } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Dataset name required' });
-    const { data, error } = await supabase.from('datasets').insert({ user_id: req.user.id, name: name.trim(), file_format: file_format || 'CSV', row_count: row_count || 0, file_size: file_size || 0, description: description || '', status: 'ready' }).select().single();
+    const rowCount = Number(row_count || 0);
+    const status = rowCount > 0 ? 'ready' : 'pending';
+    const { data, error } = await supabase.from('datasets').insert({
+      user_id: req.user.id,
+      name: name.trim(),
+      file_format: file_format || 'CSV',
+      row_count: rowCount,
+      file_size: Number(file_size || 0),
+      column_count: 0,
+      columns: [],
+      description: description || '',
+      status,
+    }).select().single();
     if (error) throw error;
-    generateDatasetInsights(data.id, data.name, data.file_format, req.user.id);
     return res.status(201).json({ dataset: data });
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
@@ -355,30 +519,64 @@ app.delete('/api/datasets/:id', verifyToken, async (req, res) => {
 
 app.post('/api/datasets/upload', verifyToken, fileUpload.single('file'), async (req, res) => {
   try {
-    let name = req.body.name, fileFormat = (req.body.file_format || 'CSV').toUpperCase();
-    let fileSize = Number(req.body.file_size) || 0, rowCount = 0;
-    if (req.file) {
-      name = name || req.file.originalname.replace(/\.[^/.]+$/, '');
-      fileFormat = req.file.originalname.split('.').pop().toUpperCase();
-      fileSize = req.file.size;
-      try { rowCount = parseFile(req.file.buffer, req.file.mimetype, req.file.originalname).length; }
-      catch (pe) { return res.status(400).json({ error: `File parse error: ${pe.message}` }); }
-    } else {
-      rowCount = Number(req.body.row_count) || (Math.floor(Math.random() * 5000) + 100);
+    if (!req.file) {
+      return res.status(400).json({ error: 'Upload a valid CSV, Excel, or JSON file to analyze.' });
     }
-    if (!name?.trim()) return res.status(400).json({ error: 'Dataset name required' });
-    const { data, error } = await supabase.from('datasets').insert({ user_id: req.user.id, name: name.trim(), description: req.body.description || '', file_format: fileFormat, file_size: fileSize, row_count: rowCount, status: 'ready' }).select().single();
+
+    const rows = parseFile(req.file.buffer, req.file.mimetype, req.file.originalname);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'Uploaded dataset must contain at least one row.' });
+    }
+
+    const name = (req.body.name || req.file.originalname.replace(/\.[^/.]+$/, '')).trim();
+    const fileFormat = req.file.originalname.split('.').pop().toUpperCase();
+    const fileSize = req.file.size;
+    const rowCount = rows.length;
+    const columns = Object.keys(rows[0] || {});
+
+    if (!name) return res.status(400).json({ error: 'Dataset name required' });
+
+    const { data, error } = await supabase.from('datasets').insert({
+      user_id: req.user.id,
+      name,
+      description: req.body.description || '',
+      file_format: fileFormat,
+      file_size: fileSize,
+      row_count: rowCount,
+      column_count: columns.length,
+      columns,
+      status: 'processing',
+    }).select().single();
+
     if (error) throw error;
-    generateDatasetInsights(data.id, data.name, data.file_format, req.user.id);
-    return res.status(201).json({ success: true, dataset: data });
-  } catch (err) { return res.status(500).json({ error: err.message }); }
+    await insertDatasetRows(data.id, rows);
+    processDatasetAsync(data.id, req.user.id).catch((err) => console.error('[async processDatasetAsync]', err.message || err));
+
+    return res.status(201).json({ dataset: data });
+  } catch (err) {
+    console.error('[Upload] failed', err.message || err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/datasets/:id/insights', verifyToken, async (req, res) => {
   try {
     const { data, error } = await supabase.from('insights').select('*').eq('dataset_id', req.params.id).order('created_at', { ascending: true });
     if (error) throw error;
-    return res.json({ insights: data || [] });
+    const insights = (data || []).map((insight) => ({
+      id: insight.id,
+      dataset_id: insight.dataset_id,
+      type: insight.insight_type,
+      title: insight.title,
+      description: insight.explanation,
+      confidence: Number(insight.confidence),
+      confidence_label: insight.confidence_label,
+      evidence: insight.evidence || {},
+      created_at: insight.created_at,
+      snapshot_id: insight.snapshot_id,
+      source: insight.reasoning_trace || { source: 'analytics_engine' }
+    }));
+    return res.json({ insights });
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 
@@ -546,8 +744,8 @@ app.post('/api/chat', verifyToken, async (req, res) => {
   }
 });
 
-const ANALYTICS_URL = 'http://analytics:8001';
-const ANALYTICS_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || '';
+const ANALYTICS_URL = process.env.ANALYTICS_URL || 'http://analytics:8001';
+const ANALYTICS_TOKEN = process.env.ANALYTICS_API_KEY || process.env.INTERNAL_SERVICE_TOKEN || '';
 
 // Analytics proxy helper
 async function proxyToAnalytics(req, res, path, method = 'POST') {
@@ -556,7 +754,7 @@ async function proxyToAnalytics(req, res, path, method = 'POST') {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'X-Internal-Token': ANALYTICS_TOKEN
+        'X-API-Key': ANALYTICS_TOKEN
       }
     };
     if (method !== 'GET' && req.body) opts.body = JSON.stringify(req.body);
@@ -568,8 +766,47 @@ async function proxyToAnalytics(req, res, path, method = 'POST') {
   }
 }
 
-app.post('/api/nl-query/:datasetId', verifyToken, (req, res) =>
-  proxyToAnalytics(req, res, `/nl-query/${req.params.datasetId}`));
+app.post('/api/nl-query/:datasetId', verifyToken, async (req, res) => {
+  try {
+    const { question } = req.body;
+    const cacheKey = `nl:${req.params.datasetId}:${Buffer.from(question || '').toString('base64').slice(0, 64)}`;
+    
+    // Check cache first
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.json({ ...JSON.parse(cached), cached: true });
+      }
+    } catch (cacheErr) {
+      console.warn('[cache] Redis read failed, bypassing:', cacheErr.message);
+    }
+
+    // Forward to analytics service
+    const ANALYTICS_TOKEN = process.env.ANALYTICS_API_KEY || process.env.INTERNAL_SERVICE_TOKEN || '';
+    const response = await fetch(`${ANALYTICS_URL}/nl-query/${req.params.datasetId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': ANALYTICS_TOKEN,
+      },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    
+    // Cache successful results for 10 minutes
+    if (data.success) {
+      try {
+        await redis.setex(cacheKey, 600, JSON.stringify(data));
+      } catch (cacheErr) {
+        console.warn('[cache] Redis write failed, bypassing:', cacheErr.message);
+      }
+    }
+    
+    return res.status(response.status).json(data);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/pipeline/bronze-to-silver/:datasetId', verifyToken, (req, res) =>
   proxyToAnalytics(req, res, `/pipeline/bronze-to-silver/${req.params.datasetId}`));
@@ -577,13 +814,13 @@ app.post('/api/pipeline/bronze-to-silver/:datasetId', verifyToken, (req, res) =>
 app.post('/api/model/build/:datasetId', verifyToken, (req, res) =>
   proxyToAnalytics(req, res, `/model/build/${req.params.datasetId}`));
 
-app.get('/api/model/:datasetId', verifyToken, (req, res) =>
+app.get('/api/model/:datasetId', verifyToken, cacheMiddleware(300), (req, res) =>
   proxyToAnalytics(req, res, `/model/${req.params.datasetId}`, 'GET'));
 
 app.get('/api/drift/distribution/:datasetIdA/:datasetIdB', verifyToken, (req, res) =>
   proxyToAnalytics(req, res, `/drift/distribution/${req.params.datasetIdA}/${req.params.datasetIdB}`, 'GET'));
 
-app.get('/api/schema/:datasetId', verifyToken, (req, res) =>
+app.get('/api/schema/:datasetId', verifyToken, cacheMiddleware(600), (req, res) =>
   proxyToAnalytics(req, res, `/schema/${req.params.datasetId}`, 'GET'));
 
 app.get('*', (_req, res) => {
@@ -602,3 +839,4 @@ app.listen(PORT, () => {
 
 process.on('SIGTERM', () => { redis.disconnect(); process.exit(0); });
 process.on('unhandledRejection', (reason) => { console.error('[nexus] unhandled rejection:', reason); });
+

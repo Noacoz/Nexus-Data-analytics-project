@@ -60,9 +60,33 @@ export function LoadingOverlay({ isLoading }) {
 export function AuroraBackground() {
   return (
     <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-      <div className="absolute w-60 h-60 bg-indigo-500 rounded-full blur-3xl opacity-20 filter blur-80" style={{ top: '-20%', left: '-10%', animation: 'aurora-drift 20s ease-in-out infinite' }}></div>
-      <div className="absolute w-50 h-50 bg-purple-600 rounded-full blur-3xl opacity-20 filter blur-80" style={{ top: '40%', right: '-15%', animation: 'aurora-drift 20s ease-in-out infinite 7s' }}></div>
-      <div className="absolute w-45 h-45 bg-cyan-500 rounded-full blur-3xl opacity-20 filter blur-80" style={{ bottom: '-10%', left: '20%', animation: 'aurora-drift 20s ease-in-out infinite 14s' }}></div>
+      <div 
+        className="absolute w-[500px] h-[500px] rounded-full blur-3xl mix-blend-screen" 
+        style={{ 
+          background: 'radial-gradient(circle, rgba(139,92,246,0.4) 0%, transparent 70%)',
+          top: '-15%', 
+          left: '-10%', 
+          animation: 'aurora-drift 20s ease-in-out infinite' 
+        }}
+      />
+      <div 
+        className="absolute w-[450px] h-[450px] rounded-full blur-3xl mix-blend-screen" 
+        style={{ 
+          background: 'radial-gradient(circle, rgba(168,85,247,0.35) 0%, transparent 70%)',
+          top: '35%', 
+          right: '-12%', 
+          animation: 'aurora-drift 20s ease-in-out infinite 7s' 
+        }}
+      />
+      <div 
+        className="absolute w-[480px] h-[480px] rounded-full blur-3xl mix-blend-screen" 
+        style={{ 
+          background: 'radial-gradient(circle, rgba(6,182,212,0.4) 0%, transparent 70%)',
+          bottom: '-10%', 
+          left: '25%', 
+          animation: 'aurora-drift 20s ease-in-out infinite 14s' 
+        }}
+      />
     </div>
   );
 }
