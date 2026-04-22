@@ -49,9 +49,15 @@ export default function DatasetsView({ datasets = [], onViewDataset, onUpload })
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <p className="font-semibold text-white">{dataset.name}</p>
-                        <p className="text-sm text-slate-400">{dataset.rows?.toLocaleString() || 0} rows • {dataset.format || 'CSV'}</p>
+                        <p className="text-sm text-slate-400">{dataset.row_count?.toLocaleString() || dataset.rows?.toLocaleString() || 0} rows • {dataset.format || 'CSV'}</p>
                       </div>
                       <span className="text-sm text-slate-400">{dataset.insights || 0} insights</span>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-400">
+                      <span className={`${dataset.status === 'completed' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        {dataset.status === 'completed' ? 'Lineage available' : 'Pending lineage'}
+                      </span>
+                      <span>{dataset.status === 'completed' ? 'Open to verify' : 'Processing'}</span>
                     </div>
                   </button>
                 ))

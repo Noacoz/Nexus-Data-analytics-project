@@ -25,14 +25,32 @@ const CommandPalette = ({ isOpen, onClose, onNavigate, datasets = [] }) => {
   const [selected, setSelected] = useState(0)
   const inputRef = useRef(null)
 
-  const datasetCommands = datasets.map(d => ({
-    id: `dataset-${d.id}`,
-    label: `Open: ${d.name}`,
-    icon: '🗄️',
-    category: 'Datasets',
-    action: 'navigate',
-    target: { view: 'dataset-detail', datasetId: d.id },
-  }))
+  const datasetCommands = datasets.flatMap(d => ([
+    {
+      id: `dataset-open-${d.id}`,
+      label: `Open dataset: ${d.name}`,
+      icon: '🗄️',
+      category: 'Datasets',
+      action: 'navigate',
+      target: { view: 'dataset-detail', datasetId: d.id },
+    },
+    {
+      id: `dataset-lineage-${d.id}`,
+      label: `Open lineage & validation: ${d.name}`,
+      icon: '🧾',
+      category: 'Datasets',
+      action: 'navigate',
+      target: { view: 'dataset-detail', datasetId: d.id },
+    },
+    {
+      id: `dataset-audit-${d.id}`,
+      label: `Open audit logs: ${d.name}`,
+      icon: '📋',
+      category: 'Datasets',
+      action: 'navigate',
+      target: { view: 'dataset-detail', datasetId: d.id },
+    },
+  ]))
 
   const allCommands = [...COMMANDS, ...datasetCommands]
 

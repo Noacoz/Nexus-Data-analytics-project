@@ -14,6 +14,7 @@ import psycopg2
 from psycopg2.pool import SimpleConnectionPool
 import json
 import os
+import uuid
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 import logging
@@ -858,35 +859,45 @@ async def analyze_dataset(dataset_id: str, api_key: str = Depends(verify_api_key
         conn = get_db_connection()
         try:
             cur = conn.cursor()
-            
-            # Fetch all rows
+            cur.execute(
+                "SELECT version FROM datasets WHERE id = %s",
+                (dataset_id,)
+            )
+            dataset_row = cur.fetchone()
+            if not dataset_row:
+                raise HTTPException(status_code=404, detail="Dataset not found")
+            dataset_version = dataset_row[0]
+
             cur.execute(
                 "SELECT data FROM dataset_rows WHERE dataset_id = %s ORDER BY row_index",
                 (dataset_id,)
             )
             rows = [row[0] for row in cur.fetchall()]
             cur.close()
-            
+
             if not rows:
                 raise HTTPException(status_code=404, detail="No rows found for dataset")
-            
+            if not all(isinstance(row, dict) for row in rows):
+                raise HTTPException(status_code=400, detail="Dataset contains non-tabular rows and cannot be analyzed")
+
             # Build DataFrame and write Parquet (bronze layer)
             df = pd.DataFrame(rows)
             parquet_path = write_parquet(dataset_id, df)
             logger.info(f"Wrote Parquet bronze layer: {parquet_path}")
-            
-            # Run analytics
+
+            computation_id = str(uuid.uuid4())
             engine = NexusAnalyticsEngine(rows, dataset_id)
             result = engine.run()
+            result["computation_id"] = computation_id
+            result["dataset_version"] = dataset_version
 
-            
             # Store snapshot
             cur = conn.cursor()
             cur.execute(
                 """
                 INSERT INTO statistical_snapshots 
-                (dataset_id, row_count, column_stats, correlations, outliers, trends, anomalies, data_quality, confidence_base)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (dataset_id, row_count, column_stats, correlations, outliers, trends, anomalies, data_quality, computation_id, dataset_version, confidence_base)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -898,19 +909,19 @@ async def analyze_dataset(dataset_id: str, api_key: str = Depends(verify_api_key
                     json.dumps(result["trends"]),
                     json.dumps(result["anomalies"]),
                     json.dumps(result["data_quality"]),
+                    computation_id,
+                    dataset_version,
                     result["confidence_base"]
                 )
             )
             snapshot_id = cur.fetchone()[0]
             conn.commit()
             cur.close()
-            
+
             result["snapshot_id"] = snapshot_id
             return result
-        
         finally:
             release_db_connection(conn)
-    
     except Exception as e:
         logger.error(f"Dataset analysis error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

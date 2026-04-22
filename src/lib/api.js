@@ -60,6 +60,12 @@ const API = {
     return res.json();
   },
 
+  async getReasoning(datasetId) {
+    const res = await fetch(`/api/datasets/${datasetId}/reasoning`, { credentials: 'include' });
+    if (!res.ok) return { reasoning: null };
+    return res.json();
+  },
+
   async getComments(datasetId) {
     const res = await fetch(`/api/datasets/${datasetId}/comments`, { credentials: 'include' });
     if (!res.ok) return { comments: [] };

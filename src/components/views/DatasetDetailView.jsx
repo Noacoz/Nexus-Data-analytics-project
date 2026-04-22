@@ -3,14 +3,28 @@ import { useDataset } from '../../hooks/useDataset'
 import { makeChart } from '../../lib/shims'
 
 export default function DatasetDetailView({ datasetId, datasets, onBack }) {
-  const { dataset, insights, snapshot, loading, error, loadDataset } = useDataset()
+  const { dataset, insights, snapshot, reasoning, lineage, auditLogs, auditLoading, auditError, auditFilters, setAuditFilters, auditLimit, setAuditLimit, hasMoreAuditLogs, loading, error, loadDataset, refreshAuditLogs, recompute } = useDataset()
   const [activeTab, setActiveTab] = useState('overview')
+  const [recomputing, setRecomputing] = useState(false)
   const chartRef = useRef(null)
   const pieChartRef = useRef(null)
 
   useEffect(() => {
     loadDataset(datasetId)
   }, [datasetId, loadDataset])
+
+  const handleRecompute = async () => {
+    if (!recompute || recomputing) return
+    setRecomputing(true)
+    try {
+      await recompute()
+      setActiveTab('lineage')
+    } catch (err) {
+      console.error('[Recompute] failed', err.message || err)
+    } finally {
+      setRecomputing(false)
+    }
+  }
 
   const current = dataset || datasets?.find(d => d.id === datasetId) || {
     name: 'Revenue Analytics 2024',
@@ -111,7 +125,10 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'data', label: 'Data Preview', icon: '🔢' },
     { id: 'insights', label: 'Insights', icon: '💡' },
+    { id: 'reasoning', label: 'AI Reasoning', icon: '🧠' },
+    { id: 'lineage', label: 'Lineage & Validation', icon: '🧾' },
     { id: 'schema', label: 'Schema', icon: '📐' },
+    { id: 'audit', label: 'Audit Logs', icon: '📋' },
   ]
 
   return (
@@ -123,15 +140,27 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
         >
           ← Back to Dashboard
         </button>
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-600 flex items-center justify-center text-white text-2xl">
-            📊
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-600 flex items-center justify-center text-white text-2xl">
+              📊
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">{current.name}</h1>
+              <p className="text-zinc-400">
+                {current.row_count?.toLocaleString() || snapshot?.row_count?.toLocaleString() || '—'} rows • {current.file_format || 'CSV'} • {current.status || 'processing'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">{current.name}</h1>
-            <p className="text-zinc-400">
-              {current.row_count?.toLocaleString() || snapshot?.row_count?.toLocaleString() || '—'} rows • {current.file_format || 'CSV'} • {current.status || 'processing'}
-            </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              onClick={handleRecompute}
+              disabled={recomputing || current.status !== 'completed'}
+              className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {recomputing ? 'Recomputing…' : 'Recompute Analytics'}
+            </button>
+            <span className="text-xs text-slate-400">Preserves history with a new snapshot and computation id.</span>
           </div>
         </div>
       </div>
@@ -220,13 +249,130 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
                   {insights.map((insight) => (
                     <div key={insight.id} className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
                       <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs uppercase tracking-[0.2em] text-slate-500">{insight.insight_type || 'Insight'}</span>
+                        <span className="text-xs uppercase tracking-[0.2em] text-slate-500">{insight.type || 'Insight'}</span>
                         <span className="rounded-full bg-slate-900/80 px-3 py-1 text-xs text-slate-300">{Math.round((insight.confidence || 0) * 100)}%</span>
                       </div>
                       <h2 className="text-xl font-semibold text-white mb-3">{insight.title}</h2>
-                      <p className="text-slate-400 mb-6">{insight.explanation}</p>
+                      <p className="text-slate-400 mb-6">{insight.description}</p>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'reasoning' && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold text-white mb-4">AI Reasoning</h2>
+              {!reasoning ? (
+                <div className="glass rounded-2xl border border-white/5 p-12 text-center">
+                  <p className="text-zinc-400">Reasoning is not available until analytics has finished processing.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="glass rounded-3xl border border-white/10 p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Primary Explanation</p>
+                        <h3 className="text-2xl font-semibold text-white mt-2">{reasoning.primary_explanation.hypothesis}</h3>
+                      </div>
+                      <span className="rounded-full bg-slate-900/80 px-3 py-1 text-xs text-slate-300">{Math.round((reasoning.confidence || 0) * 100)}%</span>
+                    </div>
+                    <p className="text-slate-400 mb-4">{reasoning.primary_explanation.supporting_evidence.type === 'correlation' ? 'This explanation is grounded in computed association metrics and avoids claiming causality.' : 'This explanation is grounded in computed statistics and highlights uncertainty clearly.'}</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-3xl bg-slate-900/80 p-4 text-sm text-slate-300 border border-white/10">
+                        <p className="font-semibold text-slate-300">Evidence</p>
+                        <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-400">{JSON.stringify(reasoning.primary_explanation.supporting_evidence, null, 2)}</pre>
+                      </div>
+                      <div className="rounded-3xl bg-slate-900/80 p-4 text-sm text-slate-300 border border-white/10">
+                        <p className="font-semibold text-slate-300">Uncertainty</p>
+                        <ul className="mt-2 list-disc list-inside text-xs text-slate-400">
+                          {(reasoning.uncertainty_factors || []).map((factor, idx) => (
+                            <li key={idx}>{factor}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="glass rounded-3xl border border-white/10 p-6">
+                    <h3 className="text-lg font-semibold text-white mb-4">Alternative explanations</h3>
+                    <div className="space-y-4">
+                      {reasoning.alternative_explanations.map((alternative, index) => (
+                        <div key={index} className="rounded-3xl bg-slate-900/80 p-5 border border-white/10">
+                          <p className="text-sm text-slate-400">Rank {index + 2}</p>
+                          <h4 className="text-lg font-semibold text-white mt-2">{alternative.hypothesis}</h4>
+                          <p className="text-slate-400 mt-2">Confidence: {Math.round((alternative.score || 0) * 100)}%</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="glass rounded-3xl border border-white/10 p-6">
+                    <h3 className="text-lg font-semibold text-white mb-4">Recommended next steps</h3>
+                    <ul className="list-disc list-inside text-sm text-slate-400 space-y-2">
+                      {(reasoning.recommended_next_steps || []).map((step, idx) => (
+                        <li key={idx}>{step}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'lineage' && (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-white mb-4">Lineage & Validation</h2>
+                  <p className="text-sm text-slate-400">Every insight and reasoning result is traced to a snapshot, version, and computation id.</p>
+                </div>
+                <button
+                  onClick={handleRecompute}
+                  disabled={recomputing || current.status !== 'completed'}
+                  className="w-fit rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {recomputing ? 'Recomputing…' : 'Recompute now'}
+                </button>
+              </div>
+              {!lineage ? (
+                <div className="glass rounded-2xl border border-white/5 p-12 text-center">
+                  <p className="text-zinc-400">Lineage metadata is not yet available.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="glass rounded-3xl border border-white/10 p-6">
+                    <h3 className="text-lg font-semibold text-white mb-3">Computation lineage</h3>
+                    <p className="text-sm text-slate-400">Dataset version</p>
+                    <p className="text-white font-semibold mb-4">{lineage.dataset?.version ?? dataset?.version ?? '—'}</p>
+                    <p className="text-sm text-slate-400">Latest snapshot</p>
+                    <p className="text-white font-semibold mb-4">{lineage.latest_snapshot?.id || 'Unavailable'}</p>
+                    <p className="text-sm text-slate-400">Computation ID</p>
+                    <p className="text-white font-semibold mb-4">{lineage.latest_snapshot?.computation_id || lineage.latest_reasoning?.computation_id || 'Unavailable'}</p>
+                    <p className="text-sm text-slate-400">Processed at</p>
+                    <p className="text-white font-semibold">{lineage.dataset?.processed_at || 'Pending'}</p>
+                  </div>
+
+                  <div className="glass rounded-3xl border border-white/10 p-6">
+                    <h3 className="text-lg font-semibold text-white mb-3">Validation status</h3>
+                    <div className="space-y-3">
+                      <div className="rounded-3xl bg-slate-900/80 p-4 border border-white/10">
+                        <p className="text-sm text-slate-400">Insight validation</p>
+                        <p className={`mt-2 font-semibold ${lineage.validation?.insights === 'valid' ? 'text-emerald-400' : lineage.validation?.insights === 'failed' ? 'text-amber-400' : 'text-slate-300'}`}>
+                          {lineage.validation?.insights || 'Pending'}
+                        </p>
+                        {lineage.validation?.insights_error && <p className="text-xs text-rose-400 mt-2">{lineage.validation.insights_error}</p>}
+                      </div>
+                      <div className="rounded-3xl bg-slate-900/80 p-4 border border-white/10">
+                        <p className="text-sm text-slate-400">Reasoning validation</p>
+                        <p className={`mt-2 font-semibold ${lineage.validation?.reasoning === 'valid' ? 'text-emerald-400' : lineage.validation?.reasoning === 'failed' ? 'text-amber-400' : 'text-slate-300'}`}>
+                          {lineage.validation?.reasoning || 'Pending'}
+                        </p>
+                        {lineage.validation?.reasoning_error && <p className="text-xs text-rose-400 mt-2">{lineage.validation.reasoning_error}</p>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -235,6 +381,143 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
           {activeTab === 'schema' && (
             <div className="glass rounded-2xl border border-white/5 p-12 text-center">
               <p className="text-zinc-400">Schema and metadata analysis will be surfaced here after processing.</p>
+            </div>
+          )}
+          {activeTab === 'audit' && (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Audit Logs</h2>
+                  <p className="text-sm text-slate-400">Filtered audit trail for uploads, analytics, insights, recomputes, and validation events.</p>
+                </div>
+                <button
+                  onClick={refreshAuditLogs}
+                  className="px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 rounded-xl text-sm transition-all"
+                >
+                  Refresh
+                </button>
+              </div>
+              
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Action Type</label>
+                  <select
+                    value={auditFilters.action_type}
+                    onChange={(event) => setAuditFilters({ ...auditFilters, action_type: event.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value="">All Actions</option>
+                    <option value="UPLOAD">Upload</option>
+                    <option value="ANALYSIS">Analysis</option>
+                    <option value="INSIGHT_GEN">Insight Generation</option>
+                    <option value="REASONING_GEN">Reasoning Generation</option>
+                    <option value="RECOMPUTE">Recompute</option>
+                  </select>
+                </div>
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Status</label>
+                  <select
+                    value={auditFilters.status}
+                    onChange={(event) => setAuditFilters({ ...auditFilters, status: event.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="success">Success</option>
+                    <option value="failed">Failed</option>
+                    <option value="processing">Processing</option>
+                  </select>
+                </div>
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Limit</label>
+                  <select
+                    value={auditLimit}
+                    onChange={(event) => setAuditLimit(Number(event.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-2">Use higher limits to fetch more entries.</p>
+                </div>
+              </div>
+
+              {auditLoading ? (
+                <div className="glass rounded-3xl border border-white/10 p-16 text-center">
+                  <p className="text-slate-400">Loading audit logs…</p>
+                </div>
+              ) : auditError ? (
+                <div className="glass rounded-3xl border border-rose-500/20 bg-rose-500/5 p-6 text-center">
+                  <p className="text-rose-300 font-semibold">Unable to load audit logs</p>
+                  <p className="text-slate-400 mt-2">{auditError}</p>
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="glass rounded-3xl border border-white/10 p-12 text-center">
+                  <div className="text-4xl mb-4 opacity-20">📋</div>
+                  <p className="text-zinc-400 text-lg">No audit logs yet</p>
+                  <p className="text-sm text-zinc-500 mt-2">Logs will appear here after dataset operations like uploads, analysis, or recomputes.</p>
+                </div>
+              ) : (
+                <div className="glass rounded-3xl border border-white/10 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-white/5 bg-slate-900/50">
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Action</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Status</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300 hidden md:table-cell">Timestamp</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditLogs.slice(0, 20).map((log, index) => (
+                          <tr key={log.id || index} className="border-b border-white/5 hover:bg-slate-800/50 transition-colors">
+                            <td className="p-4">
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gradient-to-r bg-slate-700 text-slate-300">
+                                {log.action_type}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                log.status === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                log.status === 'failed' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                                'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              }`}>
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-sm text-slate-400 hidden md:table-cell">
+                              {new Date(log.created_at).toLocaleString()}
+                            </td>
+                            <td className="p-4 max-w-md">
+                              <div className="text-sm text-slate-300 truncate" title={log.message}>
+                                {log.message}
+                              </div>
+                              {log.details && (
+                                <details className="mt-2 p-2 bg-slate-900/50 rounded-xl text-xs">
+                                  <summary className="cursor-pointer text-slate-400 hover:text-white mb-1">Details ({Object.keys(log.details).length} keys)</summary>
+                                  <pre className="mt-2 text-slate-400 overflow-auto max-h-32">{JSON.stringify(log.details, null, 2)}</pre>
+                                </details>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {hasMoreAuditLogs && (
+                    <div className="p-4 text-center text-xs text-slate-500 bg-slate-900/50">
+                      Showing {auditLogs.length} logs.{' '}
+                      <button
+                        onClick={() => setAuditLimit(auditLimit + 20)}
+                        className="text-emerald-400 hover:text-emerald-300 underline"
+                      >
+                        Load more
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>

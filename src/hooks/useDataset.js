@@ -9,6 +9,10 @@ import {
   getDatasetStatus,
   getInsights,
   getSnapshot,
+  getReasoning,
+  getLineage,
+  getAuditLogs,
+  recomputeDataset,
 } from "../lib/nexus-api";
 
 export function useDataset() {
@@ -16,6 +20,14 @@ export function useDataset() {
   const [status, setStatus] = useState(null);
   const [insights, setInsights] = useState([]);
   const [snapshot, setSnapshot] = useState(null);
+  const [reasoning, setReasoning] = useState(null);
+  const [lineage, setLineage] = useState(null);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+  const [auditLimit, setAuditLimit] = useState(20);
+  const [auditFilters, setAuditFilters] = useState({ action_type: '', status: '' });
+  const [hasMoreAuditLogs, setHasMoreAuditLogs] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -25,21 +37,46 @@ export function useDataset() {
   /**
    * Load dataset and its data
    */
+  const loadAuditLogs = useCallback(async (datasetId, filters = {}, limit = 20) => {
+    setAuditLoading(true);
+    setAuditError(null);
+
+    try {
+      const logs = await getAuditLogs(datasetId, { ...filters, limit });
+      setAuditLogs(logs || []);
+      setHasMoreAuditLogs((logs?.length || 0) >= limit);
+      return logs;
+    } catch (err) {
+      setAuditError(err.message);
+      setAuditLogs([]);
+      setHasMoreAuditLogs(false);
+      throw err;
+    } finally {
+      setAuditLoading(false);
+    }
+  }, []);
+
   const loadDataset = useCallback(async (datasetId) => {
     setLoading(true);
     setError(null);
 
     try {
-      const [statusData, insightsData, snapshotData] = await Promise.all([
+      const [statusData, insightsData, snapshotData, reasoningData, lineageData] = await Promise.all([
         getDatasetStatus(datasetId),
         getInsights(datasetId),
         getSnapshot(datasetId),
+        getReasoning(datasetId),
+        getLineage(datasetId),
       ]);
 
       setDataset(statusData);
       setStatus(statusData.status);
       setInsights(insightsData);
       setSnapshot(snapshotData);
+      setReasoning(reasoningData?.reasoning || null);
+      setLineage(lineageData);
+      setAuditLogs([]);
+      setAuditError(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -60,14 +97,20 @@ export function useDataset() {
         setStatus(statusData.status);
         setDataset(statusData);
 
-        if (statusData.status === "ready") {
-          // Dataset ready, fetch full data
-          const [insightsData, snapshotData] = await Promise.all([
+        if (statusData.status === "completed" || statusData.status === "ready") {
+          // Dataset complete, fetch full data
+          const [insightsData, snapshotData, reasoningData, lineageData, auditLogsData] = await Promise.all([
             getInsights(datasetId),
             getSnapshot(datasetId),
+            getReasoning(datasetId),
+            getLineage(datasetId),
+            getAuditLogs(datasetId),
           ]);
+          setAuditLogs(auditLogsData);
           setInsights(insightsData);
           setSnapshot(snapshotData);
+          setReasoning(reasoningData?.reasoning || null);
+          setLineage(lineageData);
 
           // Stop polling
           clearInterval(pollIntervalRef.current);
@@ -141,7 +184,34 @@ export function useDataset() {
     await loadDataset(dataset.id);
   }, [dataset?.id, loadDataset]);
 
+  const refreshAuditLogs = useCallback(async () => {
+    if (!dataset?.id) return;
+    await loadAuditLogs(dataset.id, auditFilters, auditLimit);
+  }, [dataset?.id, auditFilters, auditLimit, loadAuditLogs]);
+
+  const recompute = useCallback(async () => {
+    if (!dataset?.id) throw new Error('No dataset loaded for recompute');
+    setLoading(true);
+    setError(null);
+    try {
+      await recomputeDataset(dataset.id);
+      await loadDataset(dataset.id);
+      return true;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [dataset?.id, loadDataset]);
+
   // Cleanup on unmount
+  useEffect(() => {
+    if (dataset?.id) {
+      loadAuditLogs(dataset.id, auditFilters, auditLimit).catch(() => {});
+    }
+  }, [dataset?.id, auditFilters, auditLimit, loadAuditLogs]);
+
   useEffect(() => {
     return () => stopPolling();
   }, [stopPolling]);
@@ -151,11 +221,23 @@ export function useDataset() {
     status,
     insights,
     snapshot,
+    reasoning,
+    lineage,
+    auditLogs,
+    auditLoading,
+    auditError,
+    auditFilters,
+    setAuditFilters,
+    auditLimit,
+    setAuditLimit,
+    hasMoreAuditLogs,
     loading,
     error,
     upload,
     loadDataset,
     refresh,
+    refreshAuditLogs,
+    recompute,
     startPolling,
     stopPolling,
   };

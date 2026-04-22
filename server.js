@@ -145,17 +145,40 @@ const setAuthCookie = (res, token) =>
 
 function parseFile(buffer, mimetype, originalname) {
   if (!mimetype || !originalname) throw new Error('Missing mimetype or filename');
-  if (mimetype === 'text/csv' || originalname.endsWith('.csv'))
-    return csvParse(buffer.toString(), { columns: true, skip_empty_lines: true, trim: true });
-  if (mimetype.includes('spreadsheet') || mimetype.includes('excel') || originalname.endsWith('.xlsx') || originalname.endsWith('.xls')) {
+
+  let rows;
+  if (mimetype === 'text/csv' || originalname.endsWith('.csv')) {
+    rows = csvParse(buffer.toString(), { columns: true, skip_empty_lines: true, trim: true });
+  } else if (mimetype.includes('spreadsheet') || mimetype.includes('excel') || originalname.endsWith('.xlsx') || originalname.endsWith('.xls')) {
     const wb = xlsxRead(buffer);
-    return xlsxUtils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-  }
-  if (mimetype === 'application/json' || originalname.endsWith('.json')) {
+    rows = xlsxUtils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+  } else if (mimetype === 'application/json' || originalname.endsWith('.json')) {
     const parsed = JSON.parse(buffer.toString());
-    return Array.isArray(parsed) ? parsed : [parsed];
+    rows = Array.isArray(parsed) ? parsed : [parsed];
+  } else {
+    throw new Error('Unsupported file format. Use CSV, Excel (.xlsx), or JSON.');
   }
-  throw new Error('Unsupported file format. Use CSV, Excel (.xlsx), or JSON.');
+
+  validateParsedRows(rows);
+  return rows;
+}
+
+function validateParsedRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Dataset must contain at least one row of tabular JSON objects.');
+  }
+  if (!rows.every((row) => row && typeof row === 'object' && !Array.isArray(row))) {
+    throw new Error('Uploaded file must contain tabular rows with key/value objects.');
+  }
+  const columns = Object.keys(rows[0]);
+  if (columns.length === 0) {
+    throw new Error('Uploaded dataset must have at least one column.');
+  }
+  for (const row of rows) {
+    if (Object.keys(row).length !== columns.length) {
+      throw new Error('Dataset rows must be consistent and tabular.');
+    }
+  }
 }
 
 async function insertDatasetRows(datasetId, rows) {
@@ -180,76 +203,688 @@ function mapConfidenceLabel(confidence) {
 }
 
 async function createInsightsFromAnalysis(datasetId, snapshotId, analysisResult, userId) {
-  const findings = Array.isArray(analysisResult.top_findings) ? analysisResult.top_findings : [];
-
-  const insights = findings
-    .filter((finding) => finding && ['trend', 'anomaly', 'correlation'].includes(finding.type))
-    .map((finding) => {
-      const confidence = typeof finding.confidence === 'number' ? Math.max(0, Math.min(0.97, finding.confidence)) : Math.max(0, Math.min(0.97, analysisResult.confidence_base || 0.0));
-      return {
-        dataset_id: datasetId,
-        snapshot_id: snapshotId || null,
-        user_id: userId,
-        trigger_type: 'auto',
-        insight_type: finding.type,
-        title: finding.title,
-        explanation: finding.explanation || finding.title,
-        confidence,
-        confidence_label: finding.confidence_label || mapConfidenceLabel(confidence),
-        assumptions: finding.assumptions || { source: 'deterministic analytics' },
-        limitations: finding.limitations || [],
-        hypotheses: finding.hypotheses || [],
-        evidence: finding.evidence || {},
-        recommended_actions: finding.recommended_actions || [],
-        reasoning_trace: finding.reasoning_trace || { source: 'analytics_engine' },
-        is_proactive: false,
-      };
-    });
-
-  if (insights.length === 0) {
-    console.info(`[Analytics] dataset ${datasetId} processed with no trend/correlation/anomaly insights generated.`);
-    return;
+  if (!snapshotId) {
+    throw new Error('Insight generation requires a valid snapshot_id');
   }
 
-  await supabase.from('insights').insert(insights);
-  await supabase.from('notifications').insert({
+  const [{ data: dataset, error: datasetError }, { data: snapshot, error: snapshotError }] = await Promise.all([
+    supabase.from('datasets').select('columns, version').eq('id', datasetId).single(),
+    supabase.from('statistical_snapshots').select('*').eq('id', snapshotId).single(),
+  ]);
+
+  if (datasetError) throw datasetError;
+  if (snapshotError) throw snapshotError;
+  if (!snapshot) throw new Error(`Snapshot ${snapshotId} not found when generating insights`);
+
+  const findings = Array.isArray(analysisResult.top_findings) ? analysisResult.top_findings : [];
+  const filteredFindings = findings.filter((finding) => finding && ['trend', 'anomaly', 'correlation'].includes(finding.type));
+
+  const insightBase = {
+    dataset_id: datasetId,
+    snapshot_id: snapshotId,
+    computation_id: analysisResult.computation_id,
+    dataset_version: analysisResult.dataset_version || dataset.version,
     user_id: userId,
-    title: 'Dataset analytics complete',
-    message: `${insights.length} structured insights are now available for your dataset.`,
-    type: 'insight',
-  }).catch(console.error);
+    trigger_type: 'auto',
+    assumptions: { source: 'deterministic analytics' },
+    limitations: [],
+    hypotheses: [],
+    recommended_actions: [],
+    reasoning_trace: { source: 'analytics_engine' },
+    is_proactive: false,
+  };
+
+  const insights = filteredFindings.map((finding) => {
+    const confidence = typeof finding.confidence === 'number'
+      ? Math.max(0, Math.min(0.97, finding.confidence))
+      : Math.max(0, Math.min(0.97, analysisResult.confidence_base || 0.0));
+
+    return {
+      ...insightBase,
+      insight_type: finding.type,
+      title: finding.title,
+      explanation: finding.explanation || finding.title,
+      confidence,
+      confidence_label: finding.confidence_label || mapConfidenceLabel(confidence),
+      assumptions: finding.assumptions || insightBase.assumptions,
+      limitations: finding.limitations || [],
+      hypotheses: finding.hypotheses || [],
+      evidence: finding.evidence || {},
+      recommended_actions: finding.recommended_actions || [],
+      reasoning_trace: finding.reasoning_trace || insightBase.reasoning_trace,
+    };
+  });
+
+  if (insights.length === 0) {
+    insights.push({
+      ...insightBase,
+      insight_type: 'summary',
+      title: 'No significant patterns detected',
+      explanation: 'The dataset does not show statistically significant trends, correlations, or anomalies based on current analysis.',
+      confidence: 0.4,
+      confidence_label: 'Low',
+      evidence: {
+        reason: 'No statistical thresholds met',
+        sample_size: analysisResult.row_count || 0,
+      },
+    });
+    console.info(`[Analytics] dataset ${datasetId} completed with summary insight fallback.`);
+  }
+
+  insights.forEach((insight) => validateInsightIntegrity(insight, dataset, snapshot));
+
+  try {
+    await supabase.from('insights').insert(insights);
+    await supabase.from('notifications').insert({
+      user_id: userId,
+      title: 'Dataset analytics complete',
+      message: `${insights.length} structured insights are now available for your dataset.`,
+      type: 'insight',
+    }).catch(console.error);
+    await logAuditEvent(datasetId, 'INSIGHT_GEN', 'success', `Generated ${insights.length} validated insights for snapshot ${snapshotId}`, {
+      snapshot_id: snapshotId,
+      computation_id: analysisResult.computation_id,
+      insight_count: insights.length,
+    });
+  } catch (err) {
+    await logAuditEvent(datasetId, 'INSIGHT_GEN', 'failed', `Insight insertion failed for snapshot ${snapshotId}: ${err.message}`, {
+      snapshot_id: snapshotId,
+      computation_id: analysisResult.computation_id,
+    });
+    throw err;
+  }
+}
+
+async function storeSnapshotFromAnalysis(datasetId, analysisResult) {
+  const { data: dataset, error: datasetError } = await supabase.from('datasets').select('version, row_count').eq('id', datasetId).single();
+  if (datasetError) throw datasetError;
+  if (!dataset) throw new Error('Dataset not found for snapshot storage');
+
+  const snapshotId = analysisResult.snapshot_id || uuidv4();
+  const computationId = analysisResult.computation_id || uuidv4();
+  const datasetVersion = analysisResult.dataset_version || dataset.version;
+
+  const snapshotPayload = {
+    id: snapshotId,
+    dataset_id: datasetId,
+    computed_at: new Date().toISOString(),
+    row_count: typeof analysisResult.row_count === 'number' ? analysisResult.row_count : dataset.row_count || 0,
+    column_stats: analysisResult.column_stats || {},
+    correlations: analysisResult.correlations || {},
+    outliers: analysisResult.outliers || {},
+    trends: analysisResult.trends || {},
+    anomalies: analysisResult.anomalies || {},
+    data_quality: analysisResult.data_quality || {},
+    computation_id: computationId,
+    dataset_version: datasetVersion,
+    confidence_base: analysisResult.confidence_base || 0,
+  };
+
+  const { data, error } = await supabase.from('statistical_snapshots').insert(snapshotPayload).select().single();
+  if (error) throw error;
+  await logAuditEvent(datasetId, 'ANALYSIS', 'success', `Stored snapshot ${snapshotId} for dataset ${datasetId}`, {
+    snapshot_id: snapshotId,
+    computation_id: computationId,
+    dataset_version: datasetVersion,
+  });
+  return data;
+}
+
+function getDatasetColumns(dataset) {
+  return Array.isArray(dataset.columns) ? dataset.columns : [];
+}
+
+function validateInsightIntegrity(insight, dataset, snapshot) {
+  if (!insight.snapshot_id) throw new Error('Insight is missing snapshot_id');
+  if (insight.snapshot_id !== snapshot.id) throw new Error('Insight snapshot_id does not match stored snapshot');
+  if (insight.dataset_id !== dataset.id) throw new Error('Insight dataset_id does not match dataset');
+  if (insight.dataset_version == null || insight.dataset_version !== snapshot.dataset_version) {
+    throw new Error('Insight dataset_version mismatch snapshot dataset_version');
+  }
+  if (typeof insight.confidence !== 'number' || insight.confidence < 0 || insight.confidence > 1) {
+    throw new Error('Insight confidence must be a number between 0 and 1');
+  }
+  const evidence = insight.evidence || {};
+  if (evidence.p_value != null) {
+    if (typeof evidence.p_value !== 'number' || evidence.p_value < 0 || evidence.p_value > 1) {
+      throw new Error('Insight evidence contains invalid p_value');
+    }
+  }
+  if (evidence.correlation_coefficient != null) {
+    if (typeof evidence.correlation_coefficient !== 'number' || evidence.correlation_coefficient < -1 || evidence.correlation_coefficient > 1) {
+      throw new Error('Insight evidence contains invalid correlation_coefficient');
+    }
+  }
+  if (Array.isArray(evidence.columns)) {
+    const allowedColumns = getDatasetColumns(dataset);
+    evidence.columns.forEach((column) => {
+      if (!allowedColumns.includes(column)) {
+        throw new Error(`Insight evidence references unknown column: ${column}`);
+      }
+    });
+  }
+  if (typeof evidence.sample_size === 'number' && evidence.sample_size > snapshot.row_count) {
+    throw new Error('Insight evidence sample_size exceeds snapshot row_count');
+  }
+  if (insight.computation_id !== snapshot.computation_id) {
+    throw new Error('Insight computation_id does not match snapshot computation_id');
+  }
+  return true;
+}
+
+function computeSnapshotDiff(previous, current) {
+  if (!previous) {
+    return {
+      previous_exists: false,
+      row_count_delta: null,
+      correlation_count_delta: null,
+      anomaly_count_delta: null,
+      data_quality_delta: null,
+    };
+  }
+
+  const prevCorrCount = Array.isArray(previous.correlations?.strong_correlations) ? previous.correlations.strong_correlations.length : 0;
+  const currCorrCount = Array.isArray(current.correlations?.strong_correlations) ? current.correlations.strong_correlations.length : 0;
+  const prevAnomalyCount = (Array.isArray(previous.anomalies?.extreme_values) ? previous.anomalies.extreme_values.length : 0)
+    + (Array.isArray(previous.anomalies?.high_missing_data) ? previous.anomalies.high_missing_data.length : 0);
+  const currAnomalyCount = (Array.isArray(current.anomalies?.extreme_values) ? current.anomalies.extreme_values.length : 0)
+    + (Array.isArray(current.anomalies?.high_missing_data) ? current.anomalies.high_missing_data.length : 0);
+
+  return {
+    previous_exists: true,
+    row_count_delta: current.row_count - previous.row_count,
+    correlation_count_delta: currCorrCount - prevCorrCount,
+    anomaly_count_delta: currAnomalyCount - prevAnomalyCount,
+    data_quality_delta: (current.data_quality?.overall_score || 0) - (previous.data_quality?.overall_score || 0),
+  };
+}
+
+function similarityColumns(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  const normalizedLeft = left.map((c) => String(c).trim()).sort();
+  const normalizedRight = right.map((c) => String(c).trim()).sort();
+  return normalizedLeft.length === normalizedRight.length && normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
+function validateReasoningIntegrity(reasoningOutput, dataset, snapshot, insights = []) {
+  if (!reasoningOutput.snapshot_id && !reasoningOutput.insight_id) {
+    throw new Error('Reasoning output must reference a snapshot or an insight');
+  }
+  if (reasoningOutput.dataset_id !== dataset.id) {
+    throw new Error('Reasoning output dataset_id mismatch');
+  }
+  if (reasoningOutput.snapshot_id && reasoningOutput.snapshot_id !== snapshot.id) {
+    throw new Error('Reasoning output snapshot_id mismatch');
+  }
+  if (typeof reasoningOutput.confidence !== 'number' || reasoningOutput.confidence < 0 || reasoningOutput.confidence > 1) {
+    throw new Error('Reasoning confidence must be in range [0,1]');
+  }
+
+  const primary = reasoningOutput.reasoning?.primary_explanation;
+  if (!primary || !primary.supporting_evidence) {
+    throw new Error('Reasoning output does not contain a primary explanation with supporting evidence');
+  }
+
+  const evidence = primary.supporting_evidence || {};
+  const allowedColumns = getDatasetColumns(dataset);
+  if (Array.isArray(evidence.columns)) {
+    evidence.columns.forEach((column) => {
+      if (!allowedColumns.includes(column)) {
+        throw new Error(`Reasoning output references unknown column: ${column}`);
+      }
+    });
+  }
+
+  const traceableInsight = insights.find((insight) => insight.id === reasoningOutput.insight_id);
+  if (reasoningOutput.insight_id && !traceableInsight) {
+    throw new Error('Reasoning output references an insight that does not exist');
+  }
+
+  if (evidence.type === 'correlation') {
+    const correlations = Array.isArray(snapshot.correlations?.strong_correlations) ? snapshot.correlations.strong_correlations : [];
+    const match = correlations.some((corr) => similarityColumns(corr.columns, evidence.columns || []));
+    if (!match) {
+      throw new Error('Reasoning correlation evidence does not map to a computed correlation in the snapshot');
+    }
+    if (evidence.correlation_coefficient != null && (evidence.correlation_coefficient < -1 || evidence.correlation_coefficient > 1)) {
+      throw new Error('Reasoning correlation coefficient is out of bounds');
+    }
+    if (evidence.p_value != null && (typeof evidence.p_value !== 'number' || evidence.p_value < 0 || evidence.p_value > 1)) {
+      throw new Error('Reasoning evidence contains invalid p_value');
+    }
+  }
+
+  if (evidence.type === 'trend' && evidence.column) {
+    const trend = snapshot.trends?.[evidence.column];
+    if (!trend) {
+      throw new Error('Reasoning trend evidence does not map to a computed trend in the snapshot');
+    }
+  }
+
+  if (evidence.type === 'anomaly' && evidence.column) {
+    const anomalyMatch = [
+      ...(Array.isArray(snapshot.anomalies?.extreme_values) ? snapshot.anomalies.extreme_values : []),
+      ...(Array.isArray(snapshot.anomalies?.high_missing_data) ? snapshot.anomalies.high_missing_data : []),
+    ].some((anomaly) => anomaly.column === evidence.column || anomaly.columns?.includes(evidence.column));
+    if (!anomalyMatch) {
+      throw new Error('Reasoning anomaly evidence does not map to a computed anomaly in the snapshot');
+    }
+  }
+
+  if (reasoningOutput.reasoning?.input_signature) {
+    if (reasoningOutput.reasoning.input_signature.dataset_version !== snapshot.dataset_version) {
+      throw new Error('Reasoning input_signature dataset_version does not match snapshot');
+    }
+    if (reasoningOutput.reasoning.input_signature.computation_id !== reasoningOutput.computation_id) {
+      throw new Error('Reasoning input_signature computation_id does not match computing record');
+    }
+  }
+
+  return true;
+}
+
+async function logAuditEvent(datasetId, actionType, status, message, details = null) {
+  try {
+    await supabase.from('audit_logs').insert({
+      dataset_id: datasetId,
+      action_type: actionType,
+      status,
+      message,
+      details,
+    });
+  } catch (err) {
+    console.warn('[Audit] failed to persist event', actionType, datasetId, err.message || err);
+  }
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function sampleWeight(rowCount) {
+  if (rowCount <= 30) return 0.15;
+  if (rowCount <= 100) return 0.35;
+  if (rowCount <= 500) return 0.65;
+  return 0.9;
+}
+
+function normalizePValue(pValue) {
+  if (pValue == null) return null;
+  if (typeof pValue !== 'number' || Number.isNaN(pValue)) return null;
+  if (pValue <= 0) return 0;
+  const capped = Math.min(pValue, 0.1);
+  return 1 - capped / 0.1;
+}
+
+function buildCorrelationHypothesis(corr, context) {
+  const r = Math.abs(corr.r || 0);
+  const pValue = corr.p_value || 1;
+  const strength = corr.strength || 'weak';
+  const sample = corr.sample_size || context.row_count || 0;
+  const correlationScore = clamp(0.2 + 0.4 * r + 0.2 * normalizePValue(pValue) + 0.2 * sampleWeight(sample), 0, 0.97);
+  const confidenceLabel = correlationScore >= 0.8 ? 'High' : correlationScore >= 0.6 ? 'Medium' : 'Low';
+
+  const uncertainty = [
+    'Correlation does not imply causation.',
+    'The signal is based on the current sample only.',
+  ];
+  if (pValue > 0.05) uncertainty.push('Statistical significance is weaker than standard thresholds.');
+  if (sample < 50) uncertainty.push('Sample size is limited for this variable pair.');
+
+  return {
+    hypothesis: `The strongest evidence points to a ${corr.direction} association between ${corr.columns[0]} and ${corr.columns[1]}, but it is not proof of direct causation.`,
+    score: correlationScore,
+    supporting_evidence: {
+      type: 'correlation',
+      columns: corr.columns,
+      correlation_coefficient: corr.r,
+      p_value: pValue,
+      sample_size: sample,
+      strength,
+      row_count: context.row_count,
+      data_quality: context.data_quality?.overall_score,
+    },
+    limitations: uncertainty,
+    recommended_actions: [
+      'Validate the relationship with domain expertise.',
+      'Check for possible confounders or shared drivers.',
+      'Monitor the same variables in fresh data to confirm persistence.',
+    ],
+  };
+}
+
+function buildTrendHypothesis(column, trend, context) {
+  const r2 = trend.r_squared || 0;
+  const direction = trend.direction || 'flat';
+  const strengthScore = trend.strength === 'strong' ? 1 : trend.strength === 'moderate' ? 0.7 : 0.4;
+  const trendScore = clamp(0.18 + 0.4 * r2 + 0.22 * strengthScore + 0.2 * sampleWeight(context.row_count || 0), 0, 0.97);
+
+  const uncertainty = [
+    'Linear trend models may miss seasonality and non-linear effects.',
+    'The pattern is derived from the current dataset only.',
+  ];
+  if (direction === 'flat') uncertainty.push('The trend is weak and may be noise.');
+
+  return {
+    hypothesis: `The data suggests a ${trend.strength} ${direction} trend in ${column} based on the current sample.`,
+    score: trendScore,
+    supporting_evidence: {
+      type: 'trend',
+      column,
+      r_squared: r2,
+      slope: trend.slope,
+      pct_change: trend.pct_change,
+      row_count: context.row_count,
+      data_quality: context.data_quality?.overall_score,
+    },
+    limitations: uncertainty,
+    recommended_actions: [
+      'Review the underlying time or index ordering for this column.',
+      'Check whether the trend persists in the next sample.',
+      'Avoid assuming this trend implies a causal business driver.',
+    ],
+  };
+}
+
+function buildAnomalyHypothesis(anomaly, context) {
+  if (anomaly.z_score !== undefined) {
+    const z = Math.abs(anomaly.z_score || 0);
+    const anomalyScore = clamp(0.25 + 0.25 * Math.min(z / 4, 1) + 0.2 * sampleWeight(context.row_count || 0) + 0.15 * (context.confidence_base || 0), 0, 0.95);
+    return {
+      hypothesis: `The anomaly in ${anomaly.column} appears driven by an outlier observation (z-score ${anomaly.z_score.toFixed(2)}).`,
+      score: anomalyScore,
+      supporting_evidence: {
+        type: 'anomaly',
+        column: anomaly.column,
+        value: anomaly.value,
+        z_score: anomaly.z_score,
+        severity: anomaly.severity,
+        row_count: context.row_count,
+      },
+      limitations: [
+        'Outliers may reflect real events rather than data errors.',
+        'This conclusion is based on a single statistical signal.',
+      ],
+      recommended_actions: [
+        'Verify the raw source for the outlier record.',
+        'Consider whether the value should be treated as a true event or cleaned.',
+      ],
+    };
+  }
+
+  if (anomaly.null_pct !== undefined) {
+    const missingScore = clamp(0.25 + 0.25 * Math.min(anomaly.null_pct / 0.4, 1) + 0.2 * sampleWeight(context.row_count || 0) + 0.15 * (context.data_quality?.overall_score || 0), 0, 0.92);
+    return {
+      hypothesis: `The dataset may be biased by missing values in ${anomaly.column} (${Math.round(anomaly.null_pct * 100)}% missing).`,
+      score: missingScore,
+      supporting_evidence: {
+        type: 'anomaly',
+        column: anomaly.column,
+        null_pct: anomaly.null_pct,
+        null_count: anomaly.null_count,
+        severity: anomaly.severity,
+        row_count: context.row_count,
+      },
+      limitations: [
+        'Missing data can distort relationships and trend estimates.',
+        'The true effect depends on why values are missing.',
+      ],
+      recommended_actions: [
+        'Inspect the data collection process for this column.',
+        'Impute or collect missing values before re-running analysis.',
+      ],
+    };
+  }
+
+  return null;
+}
+
+function buildNoStrongRelationshipHypothesis(context) {
+  const baseScore = clamp(0.35 + 0.15 * (context.data_quality?.overall_score || 0) + 0.15 * sampleWeight(context.row_count || 0), 0, 0.75);
+  return {
+    hypothesis: 'No strong causal relationship can be established from the available computed statistics; current findings are primarily correlational or trend-based.',
+    score: baseScore,
+    supporting_evidence: {
+      type: 'fallback',
+      row_count: context.row_count,
+      data_quality: context.data_quality?.overall_score,
+      confidence_base: context.confidence_base,
+    },
+    limitations: [
+      'The current data and metrics do not support a definitive causal claim.',
+      'This is a conservative interpretation to avoid overstatement.',
+    ],
+    recommended_actions: [
+      'Collect more data and repeated measurements.',
+      'Use domain knowledge before inferring cause-and-effect.',
+    ],
+  };
+}
+
+function buildReasoningOutput(dataset, snapshot, analysisResult) {
+  const context = {
+    row_count: snapshot?.row_count || analysisResult.row_count || dataset?.row_count || 0,
+    data_quality: snapshot?.data_quality || analysisResult.data_quality || {},
+    confidence_base: analysisResult.confidence_base || 0,
+  };
+
+  const candidates = [];
+  const correlations = snapshot?.correlations || analysisResult.correlations || {};
+  const trendData = snapshot?.trends || analysisResult.trends || {};
+  const anomalies = snapshot?.anomalies || analysisResult.anomalies || {};
+
+  if (Array.isArray(correlations?.strong_correlations)) {
+    for (const corr of correlations.strong_correlations) {
+      candidates.push(buildCorrelationHypothesis(corr, context));
+    }
+  }
+
+  if (trendData && typeof trendData === 'object') {
+    for (const [column, trend] of Object.entries(trendData)) {
+      if (trend && (trend.strength === 'strong' || trend.strength === 'moderate')) {
+        candidates.push(buildTrendHypothesis(column, trend, context));
+      }
+    }
+  }
+
+  if (anomalies?.extreme_values) {
+    for (const anomaly of anomalies.extreme_values.slice(0, 2)) {
+      const candidate = buildAnomalyHypothesis(anomaly, context);
+      if (candidate) candidates.push(candidate);
+    }
+  }
+
+  if (anomalies?.high_missing_data) {
+    for (const anomaly of anomalies.high_missing_data.slice(0, 2)) {
+      const candidate = buildAnomalyHypothesis(anomaly, context);
+      if (candidate) candidates.push(candidate);
+    }
+  }
+
+  if (candidates.length === 0) {
+    candidates.push(buildNoStrongRelationshipHypothesis(context));
+  }
+
+  const sorted = candidates
+    .map((candidate) => ({ ...candidate, score: clamp(candidate.score, 0, 1) }))
+    .sort((a, b) => b.score - a.score);
+
+  const primary = sorted[0];
+  const alternatives = sorted.slice(1, 3);
+  const uncertaintyFactors = Array.from(new Set([
+    ...primary.limitations,
+    ...alternatives.flatMap((alt) => alt.limitations || []),
+  ])).slice(0, 5);
+
+  const recommendedNextSteps = Array.from(new Set([
+    ...primary.recommended_actions,
+    ...alternatives.flatMap((alt) => alt.recommended_actions || []),
+  ])).slice(0, 5);
+
+  return {
+    primary_explanation: primary,
+    alternative_explanations: alternatives,
+    confidence: primary.score,
+    uncertainty_factors: uncertaintyFactors,
+    recommended_next_steps: recommendedNextSteps,
+    input_signature: {
+      dataset_name: dataset?.name,
+      row_count: context.row_count,
+      dataset_version: analysisResult.dataset_version,
+      computation_id: analysisResult.computation_id,
+    },
+  };
+}
+
+async function createReasoningFromAnalysis(datasetId, snapshotId, analysisResult, userId) {
+  try {
+    const [{ data: dataset, error: datasetError }, { data: snapshot, error: snapshotError }, { data: insightRows, error: insightError }] = await Promise.all([
+      supabase.from('datasets').select('id, name, original_filename, columns, row_count, file_format, version').eq('id', datasetId).single(),
+      supabase.from('statistical_snapshots').select('*').eq('id', snapshotId).single(),
+      supabase.from('insights').select('id, insight_type, evidence, snapshot_id, computation_id').eq('dataset_id', datasetId).eq('snapshot_id', snapshotId),
+    ]);
+
+    if (datasetError) throw datasetError;
+    if (snapshotError) throw snapshotError;
+    if (insightError) throw insightError;
+
+    const reasoning = buildReasoningOutput(dataset, snapshot, analysisResult);
+    const insightId = insightRows?.[0]?.id || null;
+    const reasoningRecord = {
+      dataset_id: datasetId,
+      insight_id: insightId,
+      snapshot_id: snapshotId,
+      computation_id: analysisResult.computation_id,
+      dataset_version: analysisResult.dataset_version || dataset.version,
+      reasoning,
+      confidence: reasoning.confidence,
+      uncertainty_factors: reasoning.uncertainty_factors,
+      recommended_next_steps: reasoning.recommended_next_steps,
+    };
+
+    validateReasoningIntegrity(reasoningRecord, dataset, snapshot, insightRows || []);
+
+    await supabase.from('reasoning_outputs').insert(reasoningRecord);
+    await logAuditEvent(datasetId, 'REASONING_GEN', 'success', `Generated reasoning output for snapshot ${snapshotId}`, {
+      snapshot_id: snapshotId,
+      insight_id: insightId,
+      computation_id: analysisResult.computation_id,
+    });
+  } catch (err) {
+    await logAuditEvent(datasetId, 'REASONING_GEN', 'failed', `Reasoning generation failed for dataset ${datasetId}: ${err.message}`, {
+      dataset_id: datasetId,
+      snapshot_id: snapshotId,
+      computation_id: analysisResult.computation_id,
+    });
+    console.error('[Reasoning] generation failed for dataset', datasetId, err.message || err);
+    throw err;
+  }
+}
+
+async function fetchAnalyticsWithRetry(datasetId, maxAttempts = 2, timeoutMs = 45000) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const analyticsUrl = `${ANALYTICS_URL}/analyze/dataset/${datasetId}`;
+
+    try {
+      const response = await fetch(analyticsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': ANALYTICS_TOKEN,
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      const analysisResult = await response.json();
+      if (!response.ok) {
+        const err = new Error(analysisResult.detail || analysisResult.error || `Analytics returned status ${response.status}`);
+        lastError = err;
+        console.warn('[Analytics Retry] attempt', attempt, 'failed for dataset', datasetId, err.message);
+        continue;
+      }
+      return analysisResult;
+    } catch (err) {
+      clearTimeout(timeout);
+      lastError = err;
+      console.warn('[Analytics Retry] attempt', attempt, 'failed for dataset', datasetId, err.message || err);
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+      }
+    }
+  }
+  throw lastError || new Error('Analytics retry failed');
 }
 
 async function processDatasetAsync(datasetId, userId) {
+  const startTime = Date.now();
+  console.info(JSON.stringify({ event: 'dataset_processing', dataset_id: datasetId, status: 'processing', user_id: userId, started_at: new Date().toISOString() }));
+
   try {
-    const analyticsUrl = `${ANALYTICS_URL}/analyze/dataset/${datasetId}`;
-    const response = await fetch(analyticsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': ANALYTICS_TOKEN,
-      },
+    await supabase.from('datasets').update({ status: 'processing', processing_started_at: new Date().toISOString(), status_reason: null }).eq('id', datasetId);
+    const analysisResult = await fetchAnalyticsWithRetry(datasetId, 2, 45000);
+    await logAuditEvent(datasetId, 'ANALYSIS', 'started', `Analytics request completed, storing snapshot and lineage data.`, {
+      computation_id: analysisResult.computation_id,
+      snapshot_id: analysisResult.snapshot_id,
     });
-    const analysisResult = await response.json();
 
-    if (!response.ok) {
-      throw new Error(analysisResult.detail || analysisResult.error || JSON.stringify(analysisResult));
-    }
+    const snapshot = await storeSnapshotFromAnalysis(datasetId, analysisResult);
+    await createInsightsFromAnalysis(datasetId, snapshot.id, analysisResult, userId);
+    await createReasoningFromAnalysis(datasetId, snapshot.id, analysisResult, userId);
+    await supabase.from('datasets').update({ status: 'completed', processed_at: new Date().toISOString(), status_reason: null }).eq('id', datasetId);
 
-    await createInsightsFromAnalysis(datasetId, analysisResult.snapshot_id, analysisResult, userId);
-    await supabase.from('datasets').update({ status: 'ready', processed_at: new Date().toISOString() }).eq('id', datasetId);
+    const durationMs = Date.now() - startTime;
+    console.info(JSON.stringify({ event: 'dataset_processing', dataset_id: datasetId, status: 'completed', duration_ms: durationMs, insight_count: analysisResult.top_findings?.length || 0, computation_id: analysisResult.computation_id }));
   } catch (err) {
-    console.error('[Dataset Processing] failed for', datasetId, err.message || err);
-    await supabase.from('datasets').update({ status: 'error' }).eq('id', datasetId);
+    const durationMs = Date.now() - startTime;
+    const reason = err.message || 'Unknown analytics failure';
+    console.error(JSON.stringify({ event: 'dataset_processing', dataset_id: datasetId, status: 'error', duration_ms: durationMs, error: reason }));
+    await logAuditEvent(datasetId, 'ANALYSIS', 'failed', `Dataset processing failed: ${reason}`, { error: reason });
+    await supabase.from('datasets').update({ status: 'error', status_reason: reason }).eq('id', datasetId);
     await supabase.from('notifications').insert({
       user_id: userId,
       title: 'Dataset processing failed',
-      message: `Analytics processing failed for dataset ${datasetId}. Please retry or contact support.`,
+      message: `Analytics processing failed for dataset ${datasetId}. Reason: ${reason}`,
       type: 'system',
     }).catch(console.error);
   }
 }
 
+async function recomputeDataset(datasetId, userId) {
+  const { data: dataset, error: datasetError } = await supabase.from('datasets').select('*').eq('id', datasetId).single();
+  if (datasetError) throw datasetError;
+  if (!dataset) throw new Error('Dataset not found');
+
+  const { data: previousSnapshot } = await supabase.from('statistical_snapshots').select('*').eq('dataset_id', datasetId).order('computed_at', { ascending: false }).limit(1).maybeSingle();
+  await logAuditEvent(datasetId, 'RECOMPUTE', 'started', `Recompute triggered for dataset version ${dataset.version}`, {
+    previous_snapshot_id: previousSnapshot?.id || null,
+    dataset_version: dataset.version,
+  });
+
+  await supabase.from('datasets').update({ status: 'processing', processing_started_at: new Date().toISOString(), status_reason: null }).eq('id', datasetId);
+  const analysisResult = await fetchAnalyticsWithRetry(datasetId, 3, 45000);
+  analysisResult.computation_id = uuidv4();
+  analysisResult.snapshot_id = uuidv4();
+  analysisResult.dataset_version = dataset.version;
+
+  const storedSnapshot = await storeSnapshotFromAnalysis(datasetId, analysisResult);
+  await createInsightsFromAnalysis(datasetId, storedSnapshot.id, analysisResult, userId);
+  await createReasoningFromAnalysis(datasetId, storedSnapshot.id, analysisResult, userId);
+
+  await supabase.from('datasets').update({ status: 'completed', processed_at: new Date().toISOString(), status_reason: null }).eq('id', datasetId);
+
+  const diff = computeSnapshotDiff(previousSnapshot || null, storedSnapshot);
+  await logAuditEvent(datasetId, 'RECOMPUTE', 'completed', 'Recompute finished and preserved historical snapshot data.', {
+    previous_snapshot_id: previousSnapshot?.id || null,
+    new_snapshot_id: storedSnapshot.id,
+    diff,
+  });
+
+  return { snapshot_id: storedSnapshot.id, computation_id: analysisResult.computation_id };
+}
 
 const NEXUS_SYSTEM_PROMPT = `You are Nex — a senior data analytics engineer embedded inside Nexus Analytics. You have deep expertise in data engineering, statistical analysis, business intelligence, and machine learning. You think like a principal data scientist, communicate like a trusted colleague, and you get straight to what matters.
 
@@ -309,6 +944,28 @@ BAD: Asking two questions in one reply
 - Automated scheduled reports: PDF, CSV, Excel export
 - RBAC and full audit logs
 - REST API for custom pipelines and integrations
+-Descriptive statistics
+-mean
+-median
+-std
+-min/max
+-quartiles
+-skewness
+-normality test
+-Correlation analysis
+-Pearson correlation
+-p-value significance
+-strength and direction
+-Trend detection
+-linear regression slope
+-R²
+-direction and strength
+-percent change
+-Outlier detection
+-IQR boundaries
+-z-score extreme values
+-Isolation Forest sampling
+
 
 ## PRICING
 - Starter (Free): 1 dataset, basic analytics, 5 visualizations, 7-day Pro trial
@@ -487,45 +1144,180 @@ app.get('/api/datasets/:id/snapshot', verifyToken, async (req, res) => {
   }
 });
 
+app.post('/api/datasets/:id/recompute', verifyToken, async (req, res) => {
+  try {
+    const { snapshot_id, computation_id } = await recomputeDataset(req.params.id, req.user.id);
+    return res.status(200).json({ status: 'recompute_completed', snapshot_id, computation_id });
+  } catch (err) {
+    console.error('[Recompute] failed', err.message || err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+function sanitizeAuditDetails(details) {
+  if (details == null) return null;
+
+  const redactKey = (key) => /token|secret|password|credential|api[_-]?key|access[_-]?token/i.test(key);
+
+  const sanitizeObject = (obj, depth = 0) => {
+    if (obj == null || depth > 3) return '[REDACTED]';
+    if (Array.isArray(obj)) return obj.map((item) => sanitizeObject(item, depth + 1));
+
+    return Object.entries(obj).reduce((acc, [key, value]) => {
+      if (redactKey(key)) {
+        acc[key] = '[REDACTED]';
+        return acc;
+      }
+
+      if (typeof value === 'string') {
+        acc[key] = value.length > 1000 ? `${value.slice(0, 1000)}...` : value;
+      } else if (typeof value === 'object') {
+        acc[key] = sanitizeObject(value, depth + 1);
+      } else {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
+  };
+
+  if (typeof details === 'string') {
+    return details.length > 1000 ? `${details.slice(0, 1000)}...` : details;
+  }
+
+  const sanitized = sanitizeObject(details);
+  if (typeof sanitized === 'object' && sanitized !== null) {
+    const entries = Object.entries(sanitized);
+    if (entries.length > 20) {
+      return Object.fromEntries(entries.slice(0, 20).concat([['_truncated', true]]));
+    }
+  }
+  return sanitized;
+}
+
+app.get('/api/datasets/:id/audit-logs', verifyToken, async (req, res) => {
+  try {
+    const { limit = 50, action_type, status } = req.query;
+    const requestedLimit = parseInt(limit, 10);
+    const limitNum = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 100) : 50;
+
+    let query = supabase
+      .from('audit_logs')
+      .select('*')
+      .eq('dataset_id', req.params.id)
+      .order('created_at', { ascending: false })
+      .limit(limitNum);
+
+    if (action_type) query = query.eq('action_type', action_type);
+    if (status) query = query.eq('status', status);
+
+    const { data: logs, error } = await query;
+    if (error) throw error;
+
+    const sanitizedLogs = (logs || []).map(log => ({
+      id: log.id,
+      action_type: log.action_type,
+      status: log.status,
+      message: typeof log.message === 'string'
+        ? log.message.length > 500 ? `${log.message.slice(0, 500)}...` : log.message
+        : log.message,
+      details: sanitizeAuditDetails(log.details),
+      created_at: log.created_at,
+    }));
+
+    res.json({ audit_logs: sanitizedLogs });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/datasets/:id/lineage', verifyToken, async (req, res) => {
+  try {
+    const { data: dataset, error: datasetError } = await supabase.from('datasets').select('id, version, status, processing_started_at, processed_at, status_reason').eq('id', req.params.id).eq('user_id', req.user.id).single();
+    if (datasetError) throw datasetError;
+    if (!dataset) return res.status(404).json({ error: 'Dataset not found' });
+
+    const [{ data: snapshot, error: snapshotError }, { data: reasoning, error: reasoningError }] = await Promise.all([
+      supabase.from('statistical_snapshots').select('id, computation_id, dataset_version, row_count, computed_at').eq('dataset_id', req.params.id).order('computed_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('reasoning_outputs').select('id, insight_id, snapshot_id, computation_id, dataset_version, confidence, created_at').eq('dataset_id', req.params.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+
+    if (snapshotError) throw snapshotError;
+    if (reasoningError) throw reasoningError;
+
+    const validation = {
+      insights: 'pending',
+      reasoning: 'pending',
+    };
+
+    if (snapshot) {
+      try {
+        const { data: insights } = await supabase.from('insights').select('*').eq('dataset_id', req.params.id).eq('snapshot_id', snapshot.id);
+        insights.forEach((insight) => validateInsightIntegrity(insight, dataset, snapshot));
+        validation.insights = 'valid';
+      } catch (err) {
+        validation.insights = 'failed';
+        validation.insights_error = err.message;
+      }
+    } else {
+      validation.insights = 'missing';
+    }
+
+    if (reasoning && snapshot) {
+      try {
+        validateReasoningIntegrity(reasoning, dataset, snapshot, []);
+        validation.reasoning = 'valid';
+      } catch (err) {
+        validation.reasoning = 'failed';
+        validation.reasoning_error = err.message;
+      }
+    } else if (!reasoning) {
+      validation.reasoning = 'missing';
+    }
+
+    return res.json({ dataset, latest_snapshot: snapshot, latest_reasoning: reasoning, validation });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/datasets', verifyToken, async (req, res) => {
   try {
     const { name, file_format, row_count, file_size, description } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Dataset name required' });
     const rowCount = Number(row_count || 0);
-    const status = rowCount > 0 ? 'ready' : 'pending';
     const { data, error } = await supabase.from('datasets').insert({
       user_id: req.user.id,
       name: name.trim(),
+      original_filename: name.trim(),
       file_format: file_format || 'CSV',
       row_count: rowCount,
       file_size: Number(file_size || 0),
       column_count: 0,
       columns: [],
       description: description || '',
-      status,
+      status: 'uploaded',
+      status_reason: null,
     }).select().single();
     if (error) throw error;
     return res.status(201).json({ dataset: data });
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 
-app.delete('/api/datasets/:id', verifyToken, async (req, res) => {
-  try {
-    const { error } = await supabase.from('datasets').delete().eq('id', req.params.id).eq('user_id', req.user.id);
-    if (error) throw error;
-    return res.json({ success: true });
-  } catch (err) { return res.status(500).json({ error: err.message }); }
-});
-
 app.post('/api/datasets/upload', verifyToken, fileUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'Upload a valid CSV, Excel, or JSON file to analyze.' });
+      return res.status(400).json({ error: 'File upload required. Attach a CSV, Excel, or JSON file.' });
     }
 
-    const rows = parseFile(req.file.buffer, req.file.mimetype, req.file.originalname);
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ error: 'Uploaded dataset must contain at least one row.' });
+    if (req.file.size > 25 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Uploaded file exceeds the 25MB maximum size limit.' });
+    }
+
+    let rows;
+    try {
+      rows = parseFile(req.file.buffer, req.file.mimetype, req.file.originalname);
+    } catch (parseError) {
+      return res.status(400).json({ error: `File parse error: ${parseError.message}` });
     }
 
     const name = (req.body.name || req.file.originalname.replace(/\.[^/.]+$/, '')).trim();
@@ -535,37 +1327,73 @@ app.post('/api/datasets/upload', verifyToken, fileUpload.single('file'), async (
     const columns = Object.keys(rows[0] || {});
 
     if (!name) return res.status(400).json({ error: 'Dataset name required' });
+    if (rowCount === 0) return res.status(400).json({ error: 'Dataset must contain at least one row.' });
+    if (columns.length === 0) return res.status(400).json({ error: 'Dataset must contain at least one column.' });
 
     const { data, error } = await supabase.from('datasets').insert({
       user_id: req.user.id,
       name,
+      original_filename: req.file.originalname,
       description: req.body.description || '',
       file_format: fileFormat,
       file_size: fileSize,
       row_count: rowCount,
       column_count: columns.length,
       columns,
-      status: 'processing',
+      status: 'uploaded',
+      status_reason: null,
     }).select().single();
 
     if (error) throw error;
-    await insertDatasetRows(data.id, rows);
-    processDatasetAsync(data.id, req.user.id).catch((err) => console.error('[async processDatasetAsync]', err.message || err));
 
-    return res.status(201).json({ dataset: data });
+    await logAuditEvent(data.id, 'UPLOAD', 'success', `Dataset ${data.id} uploaded successfully`, {
+      original_filename: data.original_filename,
+      row_count: data.row_count,
+      column_count: data.column_count,
+      dataset_version: data.version,
+    });
+
+    try {
+      await insertDatasetRows(data.id, rows);
+      await supabase.from('datasets').update({ status: 'processing', processing_started_at: new Date().toISOString(), status_reason: null }).eq('id', data.id);
+      processDatasetAsync(data.id, req.user.id).catch((err) => console.error('[async processDatasetAsync]', err.message || err));
+    } catch (rowError) {
+      await logAuditEvent(data.id, 'UPLOAD', 'failed', `Failed to store dataset rows: ${rowError.message}`, {
+        dataset_id: data.id,
+        error: rowError.message,
+      });
+      await supabase.from('datasets').update({ status: 'error', status_reason: rowError.message || 'Failed to store dataset rows' }).eq('id', data.id);
+      throw rowError;
+    }
+
+    return res.status(201).json({ dataset: { ...data, status: 'processing', processing_started_at: new Date().toISOString() } });
   } catch (err) {
     console.error('[Upload] failed', err.message || err);
     return res.status(500).json({ error: err.message });
   }
 });
 
+
 app.get('/api/datasets/:id/insights', verifyToken, async (req, res) => {
   try {
+    const { data: dataset, error: datasetError } = await supabase.from('datasets').select('status, status_reason').eq('id', req.params.id).eq('user_id', req.user.id).single();
+    if (datasetError) throw datasetError;
+    if (!dataset) return res.status(404).json({ error: 'Dataset not found' });
+    if (dataset.status === 'processing' || dataset.status === 'uploaded') {
+      return res.status(409).json({ error: 'Insights unavailable until dataset processing completes', status: dataset.status });
+    }
+    if (dataset.status === 'error') {
+      return res.status(500).json({ error: 'Dataset processing failed', reason: dataset.status_reason || 'Unknown error' });
+    }
+
     const { data, error } = await supabase.from('insights').select('*').eq('dataset_id', req.params.id).order('created_at', { ascending: true });
     if (error) throw error;
     const insights = (data || []).map((insight) => ({
       id: insight.id,
       dataset_id: insight.dataset_id,
+      snapshot_id: insight.snapshot_id,
+      computation_id: insight.computation_id,
+      dataset_version: insight.dataset_version,
       type: insight.insight_type,
       title: insight.title,
       description: insight.explanation,
@@ -573,10 +1401,29 @@ app.get('/api/datasets/:id/insights', verifyToken, async (req, res) => {
       confidence_label: insight.confidence_label,
       evidence: insight.evidence || {},
       created_at: insight.created_at,
-      snapshot_id: insight.snapshot_id,
       source: insight.reasoning_trace || { source: 'analytics_engine' }
     }));
     return res.json({ insights });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/datasets/:id/reasoning', verifyToken, async (req, res) => {
+  try {
+    const { data: dataset, error: datasetError } = await supabase.from('datasets').select('status, status_reason').eq('id', req.params.id).eq('user_id', req.user.id).single();
+    if (datasetError) throw datasetError;
+    if (!dataset) return res.status(404).json({ error: 'Dataset not found' });
+    if (dataset.status === 'processing' || dataset.status === 'uploaded') {
+      return res.status(409).json({ error: 'Reasoning unavailable until dataset processing completes', status: dataset.status });
+    }
+    if (dataset.status === 'error') {
+      return res.status(500).json({ error: 'Dataset processing failed', reason: dataset.status_reason || 'Unknown error' });
+    }
+
+    const { data, error } = await supabase.from('reasoning_outputs').select('*').eq('dataset_id', req.params.id).order('created_at', { ascending: false }).limit(1).single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'No reasoning output found for this dataset' });
+
+    return res.json({ reasoning: data.reasoning, confidence: Number(data.confidence), uncertainty_factors: data.uncertainty_factors || [], recommended_next_steps: data.recommended_next_steps || [], created_at: data.created_at });
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 

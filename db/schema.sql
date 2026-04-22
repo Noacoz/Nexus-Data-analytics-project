@@ -29,11 +29,13 @@ CREATE TABLE datasets (
   row_count INTEGER DEFAULT 0,
   column_count INTEGER DEFAULT 0,
   columns JSONB,
-  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  status VARCHAR(20) NOT NULL DEFAULT 'uploaded',
   version INTEGER DEFAULT 1,
+  status_reason TEXT,
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  processing_started_at TIMESTAMP,
   processed_at TIMESTAMP,
-  CONSTRAINT valid_status CHECK (status IN ('pending', 'processing', 'ready', 'error'))
+  CONSTRAINT valid_status CHECK (status IN ('uploaded', 'processing', 'completed', 'error'))
 );
 
 CREATE INDEX idx_datasets_user_id ON datasets(user_id);
@@ -67,6 +69,8 @@ CREATE TABLE statistical_snapshots (
   trends JSONB,
   anomalies JSONB,
   data_quality JSONB,
+  computation_id UUID NOT NULL,
+  dataset_version INTEGER NOT NULL,
   confidence_base FLOAT NOT NULL
 );
 
@@ -79,7 +83,7 @@ CREATE INDEX idx_statistical_snapshots_computed_at ON statistical_snapshots(data
 CREATE TABLE insights (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
-  snapshot_id UUID REFERENCES statistical_snapshots(id) ON DELETE SET NULL,
+  snapshot_id UUID NOT NULL REFERENCES statistical_snapshots(id) ON DELETE CASCADE,
   user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   trigger_type VARCHAR(20) NOT NULL DEFAULT 'user_query',
   insight_type VARCHAR(30) NOT NULL,
@@ -87,6 +91,8 @@ CREATE TABLE insights (
   explanation TEXT NOT NULL,
   confidence FLOAT NOT NULL,
   confidence_label VARCHAR(10) NOT NULL,
+  computation_id UUID,
+  dataset_version INTEGER,
   assumptions JSONB,
   limitations JSONB,
   hypotheses JSONB,
@@ -95,7 +101,7 @@ CREATE TABLE insights (
   reasoning_trace JSONB,
   is_proactive BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT valid_insight_type CHECK (insight_type IN ('trend', 'anomaly', 'correlation', 'risk', 'opportunity', 'data_quality', 'forecast')),
+  CONSTRAINT valid_insight_type CHECK (insight_type IN ('trend', 'anomaly', 'correlation', 'summary', 'risk', 'opportunity', 'data_quality', 'forecast')),
   CONSTRAINT valid_trigger_type CHECK (trigger_type IN ('auto', 'user_query', 'monitor')),
   CONSTRAINT valid_confidence_label CHECK (confidence_label IN ('High', 'Medium', 'Low'))
 );
@@ -173,3 +179,43 @@ CREATE TABLE reasoning_logs (
 );
 
 CREATE INDEX idx_reasoning_logs_insight_id ON reasoning_logs(insight_id);
+
+-- ============================================================================
+-- TABLE 10: reasoning_outputs
+-- ============================================================================
+CREATE TABLE reasoning_outputs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+  insight_id UUID REFERENCES insights(id) ON DELETE SET NULL,
+  snapshot_id UUID REFERENCES statistical_snapshots(id) ON DELETE CASCADE,
+  computation_id UUID NOT NULL,
+  dataset_version INTEGER NOT NULL,
+  reasoning JSONB NOT NULL,
+  confidence FLOAT NOT NULL,
+  uncertainty_factors JSONB,
+  recommended_next_steps JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT valid_reasoning_linkage CHECK (insight_id IS NOT NULL OR snapshot_id IS NOT NULL)
+);
+
+CREATE INDEX idx_reasoning_outputs_dataset_id ON reasoning_outputs(dataset_id);
+CREATE INDEX idx_reasoning_outputs_computation_id ON reasoning_outputs(computation_id);
+CREATE INDEX idx_reasoning_outputs_created_at ON reasoning_outputs(dataset_id, created_at DESC);
+
+-- ============================================================================
+-- TABLE 11: audit_logs
+-- ============================================================================
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+  action_type VARCHAR(30) NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  message TEXT NOT NULL,
+  details JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT valid_action_type CHECK (action_type IN ('UPLOAD', 'ANALYSIS', 'INSIGHT_GEN', 'REASONING_GEN', 'RECOMPUTE', 'VALIDATION')),
+  CONSTRAINT valid_status CHECK (status IN ('started', 'success', 'warning', 'failed', 'completed'))
+);
+
+CREATE INDEX idx_audit_logs_dataset_id ON audit_logs(dataset_id);
+CREATE INDEX idx_audit_logs_action_type ON audit_logs(dataset_id, action_type, created_at DESC);
