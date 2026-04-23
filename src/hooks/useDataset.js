@@ -21,7 +21,7 @@ export function useDataset() {
   const [status, setStatus] = useState(null);
   const [insights, setInsights] = useState([]);
   const [snapshot, setSnapshot] = useState(null);
-[reasoning, setReasoning] = useState(null);
+  const [reasoning, setReasoning] = useState(null);
   const [kpiSummary, setKpiSummary] = useState(null);
   const [lineage, setLineage] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
