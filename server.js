@@ -483,12 +483,18 @@ function validateReasoningIntegrity(reasoningOutput, dataset, snapshot, insights
   return true;
 }
 
+function countAnomalies(anomalies) {
+  if (!anomalies) return 0;
+  return Object.values(anomalies).reduce((total, group) => {
+    if (Array.isArray(group)) return total + group.length;
+    return total;
+  }, 0);
+}
+
 function computeKpis(snapshot) {
   const total_rows = snapshot?.row_count || 0;
   const data_quality_score = snapshot?.data_quality?.overall_score || 0;
-  const extremeAnomalies = Array.isArray(snapshot?.anomalies?.extreme_values) ? snapshot.anomalies.extreme_values.length : 0;
-  const missingAnomalies = Array.isArray(snapshot?.anomalies?.high_missing_data) ? snapshot.anomalies.high_missing_data.length : 0;
-  const anomaly_count = extremeAnomalies + missingAnomalies;
+  const anomaly_count = countAnomalies(snapshot?.anomalies);
 
   // Trends summary
   const trends = snapshot?.trends || {};
@@ -1201,6 +1207,14 @@ app.get('/api/datasets/:id/kpi-summary', verifyToken, async (req, res) => {
     }
 
     const snapshot = await snapshotResponse.json();
+
+    if (!snapshot) {
+      return res.json({
+        kpis: null,
+        narrative: null
+      });
+    }
+
     const kpis = computeKpis(snapshot);
     const narrative = generateKpiNarrative(kpis);
 

@@ -262,7 +262,7 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
             </div>
           )}
 
-          {activeTab === 'reasoning' && (
+{activeTab === 'reasoning' && (
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-white mb-4">AI Reasoning</h2>
               {!reasoning ? (
@@ -321,6 +321,285 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
               )}
             </div>
           )}
+
+          {activeTab === 'kpi-intelligence' && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold text-white mb-4">KPI Intelligence</h2>
+              {kpiSummary ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
+                      <div className="flex items-start gap-3 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-white text-xl">
+                          📊
+                        </div>
+                        <div>
+                          <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium">Rows</p>
+                          <p className="text-3xl font-bold text-white">{kpiSummary.kpis.total_rows.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
+                      <div className="flex items-start gap-3 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl">
+                          ✨
+                        </div>
+                        <div>
+                          <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium">Quality Score</p>
+                          <p className="text-3xl font-bold text-white">{(kpiSummary.kpis.data_quality_score * 100).toFixed(0)}%</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
+                      <div className="flex items-start gap-3 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-white text-xl">
+                          ⚠️
+                        </div>
+                        <div>
+                          <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium">Anomalies</p>
+                          <p className="text-3xl font-bold text-white">{kpiSummary.kpis.anomaly_count}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
+                      <div className="flex items-start gap-3 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-xl">
+                          📈
+                        </div>
+                        <div>
+                          <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium">Trends</p>
+                          <p className="text-3xl font-bold text-white">{kpiSummary.kpis.trend_summary === 'No significant trends detected' ? 0 : kpiSummary.kpis.trend_summary.match(/\d+/)?.[0] || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="glass rounded-3xl border border-white/10 p-8">
+                    <h3 className="text-lg font-semibold text-white mb-6">Executive Summary</h3>
+                    <div className="prose prose-invert max-w-none">
+                      <p className="text-lg leading-relaxed text-slate-300">{kpiSummary.narrative}</p>
+                    </div>
+                    <div className="mt-8 pt-8 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium mb-3">Key Trends</p>
+                        <p className="text-slate-300">{kpiSummary.kpis.trend_summary}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium mb-3">Strong Correlations</p>
+                        <p className="text-slate-300">{kpiSummary.kpis.top_correlations}</p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="glass rounded-3xl border border-white/5 p-12 text-center">
+                  <div className="text-4xl mb-4 opacity-20">📈</div>
+                  <h3 className="text-xl font-semibold text-white mb-2">KPI Intelligence</h3>
+                  <p className="text-zinc-400 max-w-md mx-auto">
+                    {snapshot ? 'Computing KPIs from snapshot...' : 'No snapshot available yet. Upload and process a dataset to see KPI intelligence.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'schema' && (
+            <div className="glass rounded-2xl border border-white/5 p-12 text-center">
+              <p className="text-zinc-400">Schema and metadata analysis will be surfaced here after processing.</p>
+            </div>
+          )}
+          {activeTab === 'audit' && (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Audit Logs</h2>
+                  <p className="text-sm text-slate-400">Filtered audit trail for uploads, analytics, insights, recomputes, and validation events.</p>
+                </div>
+                <button
+                  onClick={refreshAuditLogs}
+                  className="px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 rounded-xl text-sm transition-all"
+                >
+                  Refresh
+                </button>
+              </div>
+              
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Action Type</label>
+                  <select
+                    value={auditFilters.action_type}
+                    onChange={(event) => setAuditFilters({ ...auditFilters, action_type: event.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value="">All Actions</option>
+                    <option value="UPLOAD">Upload</option>
+                    <option value="ANALYSIS">Analysis</option>
+                    <option value="INSIGHT_GEN">Insight Generation</option>
+                    <option value="REASONING_GEN">Reasoning Generation</option>
+                    <option value="RECOMPUTE">Recompute</option>
+                  </select>
+                </div>
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Status</label>
+                  <select
+                    value={auditFilters.status}
+                    onChange={(event) => setAuditFilters({ ...auditFilters, status: event.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="success">Success</option>
+                    <option value="failed">Failed</option>
+                    <option value="processing">Processing</option>
+                  </select>
+                </div>
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Limit</label>
+                  <select
+                    value={auditLimit}
+                    onChange={(event) => setAuditLimit(Number(event.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-2">Use higher limits to fetch more entries.</p>
+                </div>
+              </div>
+
+              {auditLoading ? (
+                <div className="glass rounded-3xl border border-white/10 p-16 text-center">
+                  <p className="text-slate-400">Loading audit logs…</p>
+                </div>
+              ) : auditError ? (
+                <div className="glass rounded-3xl border border-rose-500/20 bg-rose-500/5 p-6 text-center">
+                  <p className="text-rose-300 font-semibold">Unable to load audit logs</p>
+                  <p className="text-slate-400 mt-2">{auditError}</p>
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="glass rounded-3xl border border-white/10 p-12 text-center">
+                  <div className="text-4xl mb-4 opacity-20">📋</div>
+                  <p className="text-zinc-400 text-lg">No audit logs yet</p>
+                  <p className="text-sm text-zinc-500 mt-2">Logs will appear here after dataset operations like uploads, analysis, or recomputes.</p>
+                </div>
+              ) : (
+                <div className="glass rounded-3xl border border-white/10 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-white/5 bg-slate-900/50">
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Action</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Status</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300 hidden md:table-cell">Timestamp</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditLogs.slice(0, 20).map((log, index) => (
+                          <tr key={log.id || index} className="border-b border-white/5 hover:bg-slate-800/50 transition-colors">
+                            <td className="p-4">
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gradient-to-r bg-slate-700 text-slate-300">
+                                {log.action_type}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                log.status === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                log.status === 'failed' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                                'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              }`}>
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-sm text-slate-400 hidden md:table-cell">
+                              {new Date(log.created_at).toLocaleString()}
+                            </td>
+                            <td className="p-4 max-w-md">
+                              <div className="text-sm text-slate-300 truncate" title={log.message}>
+                                {log.message}
+                              </div>
+                              {log.details && (
+                                <details className="mt-2 p-2 bg-slate-900/50 rounded-xl text-xs">
+                                  <summary className="cursor-pointer text-slate-400 hover:text-white mb-1">Details ({Object.keys(log.details).length} keys)</summary>
+                                  <pre className="mt-2 text-slate-400 overflow-auto max-h-32">{JSON.stringify(log.details, null, 2)}</pre>
+                                </details>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {hasMoreAuditLogs && (
+                    <div className="p-4 text-center text-xs text-slate-500 bg-slate-900/50">
+                      Showing {auditLogs.length} logs.{' '}
+                      <button
+                        onClick={() => setAuditLimit(auditLimit + 20)}
+                        className="text-emerald-400 hover:text-emerald-300 underline"
+                      >
+                        Load more
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {error && (
+        <div className="fixed bottom-6 right-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 backdrop-blur-xl">
+          {error}
+        </div>
+      )}
+    </div>
+  )
+} 
+
+Assistant:  <thinking>
+KPI backend + API + hook complete (Steps 1-3 ✅).
+DatasetDetailView.jsx read - has kpi-intelligence tab already from prior edit? Wait, tabs array has it.
+useDataset.js has kpiSummary integrated in Promise.all + getKpiSummaryLocal.
+
+Step 4: Frontend tab render.
+
+Current DatasetDetailView has no {activeTab === 'kpi-intelligence'} handler - add after reasoning tab.
+
+kpiSummary structure from server: {kpis: {total_rows, data_quality_score, anomaly_count, trend_summary, top_correlations}, narrative}
+
+UI: 4 glass KPI cards + prose narrative block.
+
+TODO.md: Update Step 1-3 ✅, Step 4 next.
+
+Do parallel: update TODO.md + add KPI tab render.
+</thinking>
+
+**KPI Intelligence Layer Progress**
+
+**Updated server.js:** 
+- ✅ countAnomalies() helper
+- ✅ computeKpis() extracts row_count, data_quality.overall_score, anomalies.length, trends, correlations
+- ✅ generateKpiNarrative() deterministic template
+- ✅ /api/datasets/:id/kpi-summary endpoint with null fallback
+
+**Updated nexus-api.js:** ✅ getKpiSummary() with 404/null graceful handling
+
+**Updated useDataset.js:** ✅ kpiSummary state, getKpiSummary integrated in loadDataset/startPolling Promise.all
+
+**Next:** DatasetDetailView.jsx Step 4 - KPI tab UI (glass cards + narrative)
+
+**TODO.md updated** with ✅ marks for Steps 1-3.
+
+Now adding KPI Intelligence tab content. Upload dataset → new 📈 KPI Intelligence tab shows 4 cards (rows, quality %, anomalies, trends) + readable narrative paragraph. Empty/loading states handled. No JSON, clean prose.
+
+Now implementing Step 4 (UI).
+
+<xai:function_call name="edit_file">
+<parameter name="path">c:/Users/Noah Mutharimi/Downloads/nexus-app/src/components/views/DatasetDetailView.jsx
 
           {activeTab === 'lineage' && (
             <div className="space-y-6">
