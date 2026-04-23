@@ -10,6 +10,7 @@ import {
   getInsights,
   getSnapshot,
   getReasoning,
+  getKpiSummary,
   getLineage,
   getAuditLogs,
   recomputeDataset,
@@ -20,7 +21,8 @@ export function useDataset() {
   const [status, setStatus] = useState(null);
   const [insights, setInsights] = useState([]);
   const [snapshot, setSnapshot] = useState(null);
-  const [reasoning, setReasoning] = useState(null);
+[reasoning, setReasoning] = useState(null);
+  const [kpiSummary, setKpiSummary] = useState(null);
   const [lineage, setLineage] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -56,17 +58,30 @@ export function useDataset() {
     }
   }, []);
 
+  const getKpiSummaryLocal = useCallback(async (datasetId) => {
+    try {
+      const data = await getKpiSummary(datasetId);
+      setKpiSummary(data);
+      return data;
+    } catch (err) {
+      console.warn('[useDataset] KPI summary fetch failed:', err.message);
+      setKpiSummary(null);
+      return null;
+    }
+  }, []);
+
   const loadDataset = useCallback(async (datasetId) => {
     setLoading(true);
     setError(null);
 
     try {
-      const [statusData, insightsData, snapshotData, reasoningData, lineageData] = await Promise.all([
+      const [statusData, insightsData, snapshotData, reasoningData, lineageData, kpiSummaryData] = await Promise.all([
         getDatasetStatus(datasetId),
         getInsights(datasetId),
         getSnapshot(datasetId),
         getReasoning(datasetId),
         getLineage(datasetId),
+        getKpiSummary(datasetId),
       ]);
 
       setDataset(statusData);
@@ -75,6 +90,7 @@ export function useDataset() {
       setSnapshot(snapshotData);
       setReasoning(reasoningData?.reasoning || null);
       setLineage(lineageData);
+      setKpiSummary(kpiSummaryData);
       setAuditLogs([]);
       setAuditError(null);
     } catch (err) {
@@ -99,18 +115,20 @@ export function useDataset() {
 
         if (statusData.status === "completed" || statusData.status === "ready") {
           // Dataset complete, fetch full data
-          const [insightsData, snapshotData, reasoningData, lineageData, auditLogsData] = await Promise.all([
+          const [insightsData, snapshotData, reasoningData, lineageData, auditLogsData, kpiSummaryData] = await Promise.all([
             getInsights(datasetId),
             getSnapshot(datasetId),
             getReasoning(datasetId),
             getLineage(datasetId),
             getAuditLogs(datasetId),
+            getKpiSummary(datasetId),
           ]);
           setAuditLogs(auditLogsData);
           setInsights(insightsData);
           setSnapshot(snapshotData);
           setReasoning(reasoningData?.reasoning || null);
           setLineage(lineageData);
+          setKpiSummary(kpiSummaryData);
 
           // Stop polling
           clearInterval(pollIntervalRef.current);
@@ -238,6 +256,8 @@ export function useDataset() {
     refresh,
     refreshAuditLogs,
     recompute,
+    kpiSummary,
+    getKpiSummary: getKpiSummaryLocal,
     startPolling,
     stopPolling,
   };

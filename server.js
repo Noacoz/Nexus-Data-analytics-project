@@ -483,6 +483,47 @@ function validateReasoningIntegrity(reasoningOutput, dataset, snapshot, insights
   return true;
 }
 
+function computeKpis(snapshot) {
+  const total_rows = snapshot?.row_count || 0;
+  const data_quality_score = snapshot?.data_quality?.overall_score || 0;
+  const extremeAnomalies = Array.isArray(snapshot?.anomalies?.extreme_values) ? snapshot.anomalies.extreme_values.length : 0;
+  const missingAnomalies = Array.isArray(snapshot?.anomalies?.high_missing_data) ? snapshot.anomalies.high_missing_data.length : 0;
+  const anomaly_count = extremeAnomalies + missingAnomalies;
+
+  // Trends summary
+  const trends = snapshot?.trends || {};
+  const strongTrends = Object.entries(trends).filter(([_, t]) => t.strength && ['strong', 'moderate'].includes(t.strength));
+  let trend_summary = 'No significant trends detected';
+  if (strongTrends.length > 0) {
+    const changes = strongTrends.map(([col, t]) => `${col} ${t.direction} ${Math.abs(t.pct_change).toFixed(0)}%`).slice(0, 3);
+    trend_summary = `${strongTrends.length} key trends: ${changes.join(', ')}${strongTrends.length > 3 ? '...' : ''}`;
+  }
+
+  // Top correlations
+  const corrs = Array.isArray(snapshot?.correlations?.strong_correlations) ? snapshot.correlations.strong_correlations.slice(0, 3) : [];
+  const top_correlations = corrs.map(c => `${c.columns[0]}↔${c.columns[1]} (r=${c.r.toFixed(2)})`).join(', ') || 'None';
+
+  return {
+    total_rows,
+    data_quality_score,
+    anomaly_count,
+    trend_summary,
+    top_correlations,
+  };
+}
+
+function generateKpiNarrative(kpis) {
+  return `
+This dataset contains ${kpis.total_rows.toLocaleString()} records with a data quality score of ${(kpis.data_quality_score * 100).toFixed(1)}%.
+
+We detected ${kpis.anomaly_count} anomalies that may require investigation.
+
+Key trends indicate: ${kpis.trend_summary}.
+
+Strong relationships were found in: ${kpis.top_correlations}.
+`.trim();
+}
+
 async function logAuditEvent(datasetId, actionType, status, message, details = null) {
   try {
     await supabase.from('audit_logs').insert({
@@ -1141,6 +1182,32 @@ app.get('/api/datasets/:id/snapshot', verifyToken, async (req, res) => {
     return res.status(response.status).json(snapshot);
   } catch (err) {
     return res.status(500).json({ error: 'Snapshot service unavailable', detail: err.message });
+  }
+});
+
+app.get('/api/datasets/:id/kpi-summary', verifyToken, async (req, res) => {
+  try {
+    // Fetch snapshot first
+    const snapshotResponse = await fetch(`${ANALYTICS_URL}/snapshot/${req.params.id}/latest`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': ANALYTICS_TOKEN,
+      },
+    });
+
+    if (!snapshotResponse.ok) {
+      return res.status(snapshotResponse.status).json({ error: 'Snapshot unavailable' });
+    }
+
+    const snapshot = await snapshotResponse.json();
+    const kpis = computeKpis(snapshot);
+    const narrative = generateKpiNarrative(kpis);
+
+    return res.json({ kpis, narrative });
+  } catch (err) {
+    console.error('[KPI Summary] error:', err);
+    return res.status(500).json({ error: 'KPI computation failed', detail: err.message });
   }
 });
 

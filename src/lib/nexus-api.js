@@ -86,6 +86,19 @@ export async function getReasoning(datasetId) {
 }
 
 /**
+ * Get KPI summary and narrative for dataset
+ */
+export async function getKpiSummary(datasetId) {
+  try {
+    const response = await apiClient.get(`/datasets/${datasetId}/kpi-summary`);
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 404 || error.response?.status === 409) return null;
+    throw new Error(error.response?.data?.error || "Failed to fetch KPI summary");
+  }
+}
+
+/**
  * Get lineage and validation metadata for a dataset
  */
 export async function getLineage(datasetId) {

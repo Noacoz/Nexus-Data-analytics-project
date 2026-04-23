@@ -1,15 +1,33 @@
-# UI Exposure Audit - Audit Logs Implementation
-## Current Task: Complete UI Exposure for ALL backend features
+# KPI Intelligence Layer - Implementation TODO
 
-### Planned Steps (Execute Sequentially)
+## Status: [ ] In Progress
 
-1. [ ] **Add API endpoint** `/api/datasets/:id/audit-logs` to server.js
-2. [ ] **Add** `getAuditLogs()` to src/lib/nexus-api.js  
-3. [ ] **Extend** useDataset.js hook with `auditLogs` state + fetch
-4. [ ] **Add** 'Audit Logs' tab to DatasetDetailView.jsx (table + filters)
-5. [ ] **Test** API → UI → filters → expandable details
-6. [ ] **attempt_completion** - All features have UI surfaces
+### Step 1: [x] API Layer (nexus-api.js)
+- Add `getKpiSummary(datasetId)` exporting fetch(`/api/datasets/${datasetId}/kpi-summary`)
 
-### Progress Tracking
-- Current: Step 1 (server.js API endpoint)
+### Step 2: [x] Hook Layer (useDataset.js)
+- Add `kpiSummary` state
+- Add `getKpiSummary` async fetcher
+- Integrate into existing pattern
+
+### Step 3: [ ] Backend Endpoint (server.js)
+- Add `computeKpis(snapshot)` function
+- Add `generateKpiNarrative(kpis)` template
+- Add `GET /api/datasets/:id/kpi-summary` verifyToken endpoint
+
+### Step 4: [ ] Frontend Tab (DatasetDetailView.jsx)
+- Add `{ id: 'kpi-intelligence', label: 'KPI Intelligence', icon: '📈' }` to tabs
+- New tab render: Loading/Empty/KPI cards (4 metrics) + Narrative prose
+- Style: Glass cards, no JSON, readable paragraph
+
+### Step 5: [ ] Test & Validate
+- Upload dataset → verify processing → KPI tab loads
+- Check cards: rows, quality %, anomalies, trends/corrs
+- Empty state on no snapshot
+- No crashes on partial data
+
+**Notes:**
+- server.js: Use snapshot.row_count, data_quality.overall_score, anomalies.length
+- Narrative: Deterministic template only
+- UI: Additive, match glassmorphism style
 

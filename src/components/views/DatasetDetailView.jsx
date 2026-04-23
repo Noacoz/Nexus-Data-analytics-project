@@ -126,6 +126,7 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
     { id: 'data', label: 'Data Preview', icon: '🔢' },
     { id: 'insights', label: 'Insights', icon: '💡' },
     { id: 'reasoning', label: 'AI Reasoning', icon: '🧠' },
+    { id: 'kpi-intelligence', label: 'KPI Intelligence', icon: '📈' },
     { id: 'lineage', label: 'Lineage & Validation', icon: '🧾' },
     { id: 'schema', label: 'Schema', icon: '📐' },
     { id: 'audit', label: 'Audit Logs', icon: '📋' },
