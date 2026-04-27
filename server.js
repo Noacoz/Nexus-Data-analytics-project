@@ -1159,7 +1159,7 @@ app.get('/auth/github/callback', async (req, res) => {
 
 app.get('/api/datasets', verifyToken, async (req, res) => {
   try {
-    const { data, error } = await supabase.from('datasets').select('*').eq('user_id', req.user.id).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('datasets').select('*').eq('user_id', req.user.id).order('uploaded_at', { ascending: false });
     if (error) throw error;
     return res.json({ datasets: data || [] });
   } catch (err) { return res.status(500).json({ error: err.message }); }

@@ -37,7 +37,15 @@ const API = {
   async getDatasets() {
     const res = await fetch('/api/datasets', { credentials: 'include' });
     if (!res.ok) return { datasets: [] };
-    return res.json();
+    const json = await res.json();
+    if (!Array.isArray(json.datasets)) return { datasets: [] };
+    const normalized = json.datasets.map(d => ({
+      ...d,
+      rows: d.row_count,
+      format: d.file_format,
+      createdAt: d.uploaded_at,
+    }));
+    return { ...json, datasets: normalized };
   },
 
   async createDataset(data) {

@@ -11,7 +11,17 @@ CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   email VARCHAR(255) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255),
+  avatar_url TEXT,
+  provider VARCHAR(20) DEFAULT 'email',
+  provider_id VARCHAR(255),
+  plan VARCHAR(20) DEFAULT 'starter',
+  role VARCHAR(50),
+  bio TEXT,
+  subscription_status VARCHAR(20),
+  subscription_ends_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -25,7 +35,9 @@ CREATE TABLE datasets (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   original_filename VARCHAR(255) NOT NULL,
+  description TEXT,
   file_format VARCHAR(10) NOT NULL,
+  file_size INTEGER DEFAULT 0,
   row_count INTEGER DEFAULT 0,
   column_count INTEGER DEFAULT 0,
   columns JSONB,
@@ -219,3 +231,118 @@ CREATE TABLE audit_logs (
 
 CREATE INDEX idx_audit_logs_dataset_id ON audit_logs(dataset_id);
 CREATE INDEX idx_audit_logs_action_type ON audit_logs(dataset_id, action_type, created_at DESC);
+
+-- ============================================================================
+-- TABLE 12: notifications
+-- ============================================================================
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  type VARCHAR(30) NOT NULL DEFAULT 'system',
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_read ON notifications(user_id, read, created_at DESC);
+
+-- ============================================================================
+-- TABLE 13: comments
+-- ============================================================================
+CREATE TABLE comments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_name VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_comments_dataset_id ON comments(dataset_id);
+CREATE INDEX idx_comments_created_at ON comments(dataset_id, created_at DESC);
+
+-- ============================================================================
+-- TABLE 14: reports
+-- ============================================================================
+CREATE TABLE reports (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  type VARCHAR(50) DEFAULT 'Analytics',
+  dataset_id UUID REFERENCES datasets(id) ON DELETE SET NULL,
+  status VARCHAR(20) DEFAULT 'Draft',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_reports_user_id ON reports(user_id);
+CREATE INDEX idx_reports_created_at ON reports(user_id, created_at DESC);
+
+-- ============================================================================
+-- TABLE 15: settings
+-- ============================================================================
+CREATE TABLE settings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255),
+  timezone VARCHAR(50) DEFAULT 'UTC',
+  anonymizeData BOOLEAN DEFAULT FALSE,
+  shareMetrics BOOLEAN DEFAULT FALSE,
+  retentionDays INTEGER,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_settings_user_id ON settings(user_id);
+
+-- ============================================================================
+-- TABLE 16: team_members
+-- ============================================================================
+CREATE TABLE team_members (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workspace_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email VARCHAR(255) NOT NULL,
+  name VARCHAR(255),
+  role VARCHAR(50) DEFAULT 'member',
+  status VARCHAR(20) DEFAULT 'Active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_team_members_workspace_id ON team_members(workspace_id);
+CREATE INDEX idx_team_members_created_at ON team_members(workspace_id, created_at DESC);
+
+-- ============================================================================
+-- TABLE 17: team_invitations
+-- ============================================================================
+CREATE TABLE team_invitations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workspace_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email VARCHAR(255) NOT NULL,
+  role VARCHAR(50) DEFAULT 'member',
+  invited_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status VARCHAR(20) DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_team_invitations_workspace_id ON team_invitations(workspace_id);
+
+-- ============================================================================
+-- TABLE 18: payments
+-- ============================================================================
+CREATE TABLE payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  payment_intent_id VARCHAR(255) NOT NULL,
+  cardholder_name VARCHAR(255),
+  country VARCHAR(10),
+  status VARCHAR(20) NOT NULL,
+  plan VARCHAR(20) NOT NULL,
+  amount INTEGER NOT NULL,
+  currency VARCHAR(10) DEFAULT 'usd',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_payments_user_id ON payments(user_id);
+CREATE INDEX idx_payments_created_at ON payments(user_id, created_at DESC);
+

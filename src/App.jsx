@@ -300,11 +300,14 @@ function App() {
   }, [addToast, handleViewChange])
 
   const handleAddDataset = useCallback((dataset) => {
-    setDatasets(prev => [{
-      id: Date.now(), ...dataset,
-      createdAt: new Date().toISOString(),
+    const normalized = {
+      ...dataset,
+      rows: dataset.row_count,
+      format: dataset.file_format,
+      createdAt: dataset.uploaded_at || new Date().toISOString(),
       visualizations: 0, insights: 0, comments: 0
-    }, ...prev])
+    };
+    setDatasets(prev => [normalized, ...prev])
     addToast(`Dataset "${dataset.name}" uploaded successfully!`, 'success')
     handleViewChange('dashboard')
   }, [addToast, handleViewChange])
@@ -329,7 +332,7 @@ function App() {
   )
 
   const renderView = () => {
-  if (isCheckingAuth) return null;
+    if (isCheckingAuth) return null;
     if (currentView === 'home') return <HomeView onExplore={() => handleViewChange('product')} onGetStarted={() => handleViewChange('login')} />
     if (currentView === 'product') return <ProductView />
     if (currentView === 'pricing') return <PricingView onSelectPlan={handlePlanSelection} />
@@ -339,7 +342,7 @@ function App() {
     if (currentView === 'dashboard') return <DashboardView datasets={datasets} isLoading={datasetsLoading} onViewDataset={(datasetId) => handleViewChange({view: 'dataset-detail', datasetId})} onUpload={() => handleViewChange('dataset-upload')} showTrialBanner={showTrialBanner} onDismissTrial={() => setShowTrialBanner(false)} setCurrentView={handleViewChange} pushToast={addToast} currentUser={currentUser} />
     if (currentView === 'profile') return <ProfileView isLoggedIn={isLoggedIn} onLogout={handleLogout} setCurrentView={handleViewChange} pushToast={addToast} currentUser={currentUser} onBack={handleBack} />
     if (typeof currentView === 'object' && currentView.view === 'dataset-detail') return <DatasetDetailView datasetId={currentView.datasetId} datasets={datasets} onBack={handleBack} />
-    if (currentView === 'dataset-upload') return <DatasetUploadView onUpload={handleAddDataset} onCancel={() => handleViewChange('dashboard')} />
+    if (currentView === 'dataset-upload') return <DatasetUploadView onUpload={handleAddDataset} onCancel={() => handleViewChange('dashboard')} pushToast={addToast} />
     if (currentView === 'team') return <TeamView onInvite={handleAddTeamMember} setCurrentView={handleViewChange} />
     if (currentView === 'reports') return <ReportsView setCurrentView={handleViewChange} />
     if (currentView === 'settings') return <SettingsView settings={workspaceSettings} onSave={(s) => { setWorkspaceSettings(s); addToast('Settings saved!', 'success') }} setCurrentView={handleViewChange} />
@@ -406,7 +409,7 @@ function App() {
       {showChatbot && (
         <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 60, width: 420, maxWidth: '90vw', boxShadow: '0 10px 30px rgba(2,6,23,0.6)' }}>
           <div style={{ background: '#071428', borderRadius: 12, overflow: 'hidden' }}>
-            <button onClick={() => setShowChatbot(false)} style={{ position: 'absolute', right: 8, top: 8, zIndex: 70, background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>âœ•</button>
+            <button onClick={() => setShowChatbot(false)} style={{ position: 'absolute', right: 8, top: 8, zIndex: 70, background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>✕</button>
             <AIChatbot />
           </div>
         </div>
@@ -427,6 +430,3 @@ function App() {
 }
 
 export default App
-
-
-
