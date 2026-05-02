@@ -141,26 +141,25 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
         </p>
       </div>
 
-      <div className="flex gap-1 mb-6 p-1 glass rounded-2xl border border-white/5 w-fit">
+      <div className="flex gap-6 border-b border-zinc-800 mb-6">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+            className={`pb-3 text-sm font-medium transition ${
               activeTab === tab.id
-                ? "bg-gradient-to-r from-violet-600 to-cyan-600 text-white shadow-lg shadow-violet-900/30"
-                : "text-zinc-400 hover:text-white hover:bg-white/5"
+                ? 'text-white border-b-2 border-white'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
-            <span>{tab.icon}</span>
             {tab.label}
           </button>
         ))}
       </div>
 
       {loading && !dataset ? (
-        <div className="glass rounded-2xl border border-white/5 p-12 text-center">
-          <p className="text-zinc-400">Loading dataset analytics...</p>
+        <div className="glass rounded-2xl p-12 text-center">
+          <p className="text-zinc-400">Analyzing dataset...</p>
         </div>
       ) : (
         <>
@@ -297,84 +296,63 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
             </div>
           )}
 
-          {activeTab === 'kpi-intelligence' && (
+          {activeTab === 'performance' && (
             <div className="space-y-6">
-              <h2 className="text-xl font-semibold text-white mb-4">KPI Intelligence</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="glass rounded-2xl p-5">
+                  <p className="text-sm text-zinc-400">Total Rows</p>
+                  <p className="text-2xl font-semibold text-white mt-1">
+                    {snapshot?.row_count?.toLocaleString() || '—'}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-2">
+                    Dataset size
+                  </p>
+                </div>
+
+                <div className="glass rounded-2xl p-5">
+                  <p className="text-sm text-zinc-400">Data Quality</p>
+                  <p className="text-2xl font-semibold text-white mt-1">
+                    {snapshot?.data_quality?.overall_score ? `${(snapshot.data_quality.overall_score * 100).toFixed(0)}%` : 'Pending'}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-2">
+                    {snapshot?.data_quality?.quality_label || 'Analysis in progress'}
+                  </p>
+                </div>
+
+                <div className="glass rounded-2xl p-5">
+                  <p className="text-sm text-zinc-400">Anomalies</p>
+                  <p className="text-2xl font-semibold text-white mt-1">
+                    {kpiSummary?.kpis?.anomaly_count || 0}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-2">
+                    Detected issues
+                  </p>
+                </div>
+
+                <div className="glass rounded-2xl p-5">
+                  <p className="text-sm text-zinc-400">Trends</p>
+                  <p className="text-2xl font-semibold text-white mt-1">
+                    {kpiSummary?.kpis?.trend_summary === 'No significant trends detected' ? 0 : kpiSummary?.kpis?.trend_summary?.match(/\d+/)?.[0] || 0}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-2">
+                    Identified patterns
+                  </p>
+                </div>
+              </div>
+
               {kpiSummary ? (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <div className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
-                      <div className="flex items-start gap-3 mb-4">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-white text-xl">
-                          📊
-                        </div>
-                        <div>
-                          <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium">Rows</p>
-                          <p className="text-3xl font-bold text-white">{kpiSummary.kpis.total_rows.toLocaleString()}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
-                      <div className="flex items-start gap-3 mb-4">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl">
-                          ✨
-                        </div>
-                        <div>
-                          <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium">Quality Score</p>
-                          <p className="text-3xl font-bold text-white">{(kpiSummary.kpis.data_quality_score * 100).toFixed(0)}%</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
-                      <div className="flex items-start gap-3 mb-4">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-white text-xl">
-                          ⚠️
-                        </div>
-                        <div>
-                          <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium">Anomalies</p>
-                          <p className="text-3xl font-bold text-white">{kpiSummary.kpis.anomaly_count}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="glass rounded-3xl border border-white/10 p-6 hover:border-violet-500/30 transition-all">
-                      <div className="flex items-start gap-3 mb-4">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-xl">
-                          📈
-                        </div>
-                        <div>
-                          <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium">Trends</p>
-                          <p className="text-3xl font-bold text-white">{kpiSummary.kpis.trend_summary === 'No significant trends detected' ? 0 : kpiSummary.kpis.trend_summary.match(/\d+/)?.[0] || 0}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="glass rounded-3xl border border-white/10 p-8">
-                    <h3 className="text-lg font-semibold text-white mb-6">Executive Summary</h3>
-                    <div className="prose prose-invert max-w-none">
-                      <p className="text-lg leading-relaxed text-slate-300">{kpiSummary.narrative}</p>
-                    </div>
-                    <div className="mt-8 pt-8 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium mb-3">Key Trends</p>
-                        <p className="text-slate-300">{kpiSummary.kpis.trend_summary}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-zinc-400 uppercase tracking-wider font-medium mb-3">Strong Correlations</p>
-                        <p className="text-slate-300">{kpiSummary.kpis.top_correlations}</p>
-                      </div>
-                    </div>
-                  </div>
-                </>
+                <div className="glass rounded-2xl p-6">
+                  <h3 className="text-lg font-semibold text-white mb-3">
+                    Summary
+                  </h3>
+                  <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                    {kpiSummary.narrative}
+                  </p>
+                </div>
               ) : (
-                <div className="glass rounded-3xl border border-white/5 p-12 text-center">
-                  <div className="text-4xl mb-4 opacity-20">📈</div>
-                  <h3 className="text-xl font-semibold text-white mb-2">KPI Intelligence</h3>
-                  <p className="text-zinc-400 max-w-md mx-auto">
-                    {snapshot ? 'Computing KPIs from snapshot...' : 'No snapshot available yet. Upload and process a dataset to see KPI intelligence.'}
+                <div className="glass rounded-2xl p-12 text-center">
+                  <p className="text-zinc-400">
+                    No data available yet
                   </p>
                 </div>
               )}
@@ -524,9 +502,145 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
             </div>
           )}
 
-          {activeTab === 'ask-data' && (
-            <div className="h-full">
-              <ConversationalAnalyst datasetId={dataset?.id} />
+          {activeTab === 'data-flow' && (
+            <div className="glass rounded-2xl p-12 text-center">
+              <p className="text-zinc-400">Data lineage and validation will be displayed here.</p>
+            </div>
+          )}
+
+          {activeTab === 'activity' && (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Activity</h2>
+                  <p className="text-sm text-slate-400">Audit trail for uploads, analytics, insights, recomputes, and validation events.</p>
+                </div>
+                <button
+                  onClick={refreshAuditLogs}
+                  className="px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 rounded-xl text-sm transition-all"
+                >
+                  Refresh
+                </button>
+              </div>
+              
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Action Type</label>
+                  <select
+                    value={auditFilters.action_type}
+                    onChange={(event) => setAuditFilters({ ...auditFilters, action_type: event.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value="">All Actions</option>
+                    <option value="UPLOAD">Upload</option>
+                    <option value="ANALYSIS">Analysis</option>
+                    <option value="INSIGHT_GEN">Insight Generation</option>
+                    <option value="REASONING_GEN">Reasoning Generation</option>
+                    <option value="RECOMPUTE">Recompute</option>
+                  </select>
+                </div>
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Status</label>
+                  <select
+                    value={auditFilters.status}
+                    onChange={(event) => setAuditFilters({ ...auditFilters, status: event.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="success">Success</option>
+                    <option value="failed">Failed</option>
+                    <option value="processing">Processing</option>
+                  </select>
+                </div>
+                <div className="glass rounded-3xl border border-white/10 p-4">
+                  <label className="block text-sm text-slate-400 mb-2">Limit</label>
+                  <select
+                    value={auditLimit}
+                    onChange={(event) => setAuditLimit(Number(event.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-2">Use higher limits to fetch more entries.</p>
+                </div>
+              </div>
+
+              {auditLoading ? (
+                <div className="glass rounded-2xl p-12 text-center">
+                  <p className="text-zinc-400">Analyzing dataset...</p>
+                </div>
+              ) : auditError ? (
+                <div className="glass rounded-2xl p-6 text-center">
+                  <p className="text-rose-300 font-semibold">Unable to load activity logs</p>
+                  <p className="text-slate-400 mt-2">{auditError}</p>
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="glass rounded-2xl p-12 text-center">
+                  <p className="text-zinc-400">No activity yet</p>
+                </div>
+              ) : (
+                <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-white/5 bg-slate-900/50">
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Action</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Status</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300 hidden md:table-cell">Timestamp</th>
+                          <th className="p-4 text-left text-sm font-semibold text-slate-300">Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditLogs.slice(0, 20).map((log, index) => (
+                          <tr key={log.id || index} className="border-b border-white/5 hover:bg-slate-800/50 transition-colors">
+                            <td className="p-4">
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gradient-to-r bg-slate-700 text-slate-300">
+                                {log.action_type}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                log.status === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                log.status === 'failed' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                                'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              }`}>
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-sm text-slate-400 hidden md:table-cell">
+                              {new Date(log.created_at).toLocaleString()}
+                            </td>
+                            <td className="p-4 max-w-md">
+                              <div className="text-sm text-slate-300 truncate" title={log.message}>
+                                {log.message}
+                              </div>
+                              {log.details && (
+                                <details className="mt-2 p-2 bg-slate-900/50 rounded-xl text-xs">
+                                  <summary className="cursor-pointer text-slate-400 hover:text-white mb-1">Details ({Object.keys(log.details).length} keys)</summary>
+                                  <pre className="mt-2 text-slate-400 overflow-auto max-h-32">{JSON.stringify(log.details, null, 2)}</pre>
+                                </details>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {hasMoreAuditLogs && (
+                    <div className="p-4 text-center text-xs text-slate-500 bg-slate-900/50">
+                      Showing {auditLogs.length} logs.{' '}
+                      <button
+                        onClick={() => setAuditLimit(auditLimit + 20)}
+                        className="text-emerald-400 hover:text-emerald-300 underline"
+                      >
+                        Load more
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>

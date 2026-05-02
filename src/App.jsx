@@ -380,6 +380,7 @@ function App() {
           onNavigate={handleViewChange}
           isOpen={isMenuOpen}
           onClose={() => setIsMenuOpen(false)}
+          onOpenPalette={() => setPaletteOpen(true)}
         />
       )}
 

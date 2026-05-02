@@ -6,7 +6,7 @@ const normalizePath = (path) => {
   return path.replace(/\/+$|^\s+|\s+$/g, '') || '/'
 }
 
-export default function Sidebar({ currentPath = '/', onNavigate, isOpen = false, onClose }) {
+export default function Sidebar({ currentPath = '/', onNavigate, isOpen = false, onClose, onOpenPalette }) {
   const [expandedSections, setExpandedSections] = useState({ core: true, operations: true, admin: true })
   const normalizedCurrent = normalizePath(currentPath)
 
@@ -48,7 +48,7 @@ export default function Sidebar({ currentPath = '/', onNavigate, isOpen = false,
                             onNavigate(item.route)
                             onClose?.()
                           }}
-                          className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${isActive ? 'bg-violet-500/15 text-violet-200 border border-violet-500/20' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+                          className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${isActive ? 'bg-zinc-800 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
                         >
                           <span className="w-8 h-8 rounded-xl bg-slate-900/80 flex items-center justify-center text-base">{item.icon}</span>
                           <span className="text-sm font-medium truncate">{item.label}</span>
@@ -62,7 +62,19 @@ export default function Sidebar({ currentPath = '/', onNavigate, isOpen = false,
           })}
         </div>
       </div>
-      <div className="px-6 pb-6">
+      <div className="px-6 pb-6 space-y-4">
+        <button
+          onClick={onOpenPalette}
+          className="w-full text-left px-4 py-3 rounded-2xl bg-slate-900/90 text-slate-200 hover:bg-slate-800 transition-all"
+        >
+          ⌘K Command palette
+        </button>
+        <button
+          onClick={() => onNavigate('dataset-upload')}
+          className="w-full text-left px-4 py-3 rounded-2xl bg-slate-900/90 text-slate-200 hover:bg-slate-800 transition-all"
+        >
+          📤 Upload dataset
+        </button>
         <div className="rounded-3xl bg-slate-900/80 border border-white/10 p-4">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-2">Workspace status</p>
           <p className="text-sm text-slate-300">Connected • Secure • Observability ready</p>
