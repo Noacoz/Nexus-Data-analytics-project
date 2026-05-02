@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useDataset } from '../../hooks/useDataset'
 import { makeChart } from '../../lib/shims'
+import ConversationalAnalyst from '../ConversationalAnalyst'
 
 export default function DatasetDetailView({ datasetId, datasets, onBack }) {
   const { dataset, insights, snapshot, reasoning, kpiSummary, lineage, auditLogs, auditLoading, auditError, auditFilters, setAuditFilters, auditLimit, setAuditLimit, hasMoreAuditLogs, loading, error, loadDataset, refreshAuditLogs, recompute } = useDataset()
@@ -18,7 +19,7 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
     setRecomputing(true)
     try {
       await recompute()
-      setActiveTab('lineage')
+      setActiveTab('data-flow')
     } catch (err) {
       console.error('[Recompute] failed', err.message || err)
     } finally {
@@ -122,48 +123,22 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
   }, [activeTab])
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'data', label: 'Data Preview', icon: '🔢' },
-    { id: 'insights', label: 'Insights', icon: '💡' },
-    { id: 'reasoning', label: 'AI Reasoning', icon: '🧠' },
-    { id: 'kpi-intelligence', label: 'KPI Intelligence', icon: '📈' },
-    { id: 'lineage', label: 'Lineage & Validation', icon: '🧾' },
-    { id: 'schema', label: 'Schema', icon: '📐' },
-    { id: 'audit', label: 'Audit Logs', icon: '📋' },
+    { id: 'overview', label: 'Overview' },
+    { id: 'performance', label: 'Performance' },
+    { id: 'insights', label: 'Insights' },
+    { id: 'data-flow', label: 'Data Flow' },
+    { id: 'activity', label: 'Activity' },
   ]
 
   return (
-    <div className="min-h-screen bg-[#09090B] p-6">
-      <div className="mb-8">
-        <button 
-          onClick={onBack}
-          className="text-zinc-400 hover:text-white transition-colors mb-3 flex items-center gap-1"
-        >
-          ← Back to Dashboard
-        </button>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-600 flex items-center justify-center text-white text-2xl">
-              📊
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">{current.name}</h1>
-              <p className="text-zinc-400">
-                {current.row_count?.toLocaleString() || snapshot?.row_count?.toLocaleString() || '—'} rows • {current.file_format || 'CSV'} • {current.status || 'processing'}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <button
-              onClick={handleRecompute}
-              disabled={recomputing || current.status !== 'completed'}
-              className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {recomputing ? 'Recomputing…' : 'Recompute Analytics'}
-            </button>
-            <span className="text-xs text-slate-400">Preserves history with a new snapshot and computation id.</span>
-          </div>
-        </div>
+    <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-white">
+          {dataset?.name || 'Dataset'}
+        </h1>
+        <p className="text-sm text-zinc-400 mt-1">
+          {dataset?.description || 'Analyze and understand your dataset'}
+        </p>
       </div>
 
       <div className="flex gap-1 mb-6 p-1 glass rounded-2xl border border-white/5 w-fit">
@@ -546,6 +521,12 @@ export default function DatasetDetailView({ datasetId, datasets, onBack }) {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'ask-data' && (
+            <div className="h-full">
+              <ConversationalAnalyst datasetId={dataset?.id} />
             </div>
           )}
         </>
