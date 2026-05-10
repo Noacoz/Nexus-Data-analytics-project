@@ -47,10 +47,9 @@ export default function DatasetUploadView({ onUpload, onCancel, pushToast }) {
     }
 
     const fileExt = fileName.split('.').pop().toUpperCase()
-    const validFormats = ['CSV', 'JSON', 'PARQUET', 'XLSX', 'XLS', 'TSV', 'XML', 'SQL']
-    if (!validFormats.includes(fileExt)) {
-      if (pushToast) pushToast('Invalid file format. Supported: CSV, JSON, Parquet, Excel, TSV, XML, SQL', 'error')
-      return
+  const validFormats = ['CSV', 'JSON', 'XLSX', 'XLS']
+  if (!validFormats.includes(fileExt)) {
+      if (pushToast) pushToast('Invalid file format. Supported: CSV, JSON, Excel', 'error')
     }
 
     setUploading(true)
@@ -92,7 +91,7 @@ export default function DatasetUploadView({ onUpload, onCancel, pushToast }) {
           Back
         </button>
         <h1 className="text-3xl font-bold mb-2 text-center">Upload Dataset</h1>
-        <p className="text-slate-400 text-center mb-12">Select a CSV, JSON, Parquet, or Excel file</p>
+        <p className="text-slate-400 text-center mb-12">Select a CSV, JSON, or Excel file</p>
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Drag Drop Area */}
@@ -117,12 +116,12 @@ export default function DatasetUploadView({ onUpload, onCancel, pushToast }) {
               <input
                 type="file"
                 onChange={handleChange}
-                accept=".csv,.json,.parquet,.xlsx,.xls,.tsv,.xml,.sql"
+                accept=".csv,.json,.xlsx,.xls"
                 className="hidden"
                 disabled={uploading}
               />
             </label>
-            <p className="text-xs text-slate-400 mt-4">Maximum file size: 500 MB</p>
+            <p className="text-xs text-slate-400 mt-4">Maximum file size: 25 MB</p>
           </div>
 
           {fileName && (

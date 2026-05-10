@@ -46,13 +46,21 @@ const fileUpload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: 50 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [
+    const allowedMimeTypes = [
       'text/csv',
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/json',
+      'application/octet-stream',
     ];
-    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Only CSV, Excel, and JSON files are allowed'));
+    const allowedExtensions = ['.csv', '.xlsx', '.xls', '.json'];
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV, Excel, and JSON files are allowed'));
+    }
   },
 });
 

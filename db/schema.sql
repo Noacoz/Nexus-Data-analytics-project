@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================================================
 -- TABLE 1: users
 -- ============================================================================
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   email VARCHAR(255) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
@@ -25,12 +25,12 @@ CREATE TABLE users (
   last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- ============================================================================
 -- TABLE 2: datasets
 -- ============================================================================
-CREATE TABLE datasets (
+CREATE TABLE IF NOT EXISTS datasets (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
@@ -50,27 +50,27 @@ CREATE TABLE datasets (
   CONSTRAINT valid_status CHECK (status IN ('uploaded', 'processing', 'completed', 'error'))
 );
 
-CREATE INDEX idx_datasets_user_id ON datasets(user_id);
-CREATE INDEX idx_datasets_status ON datasets(status);
-CREATE INDEX idx_datasets_user_status ON datasets(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_datasets_user_id ON datasets(user_id);
+CREATE INDEX IF NOT EXISTS idx_datasets_status ON datasets(status);
+CREATE INDEX IF NOT EXISTS idx_datasets_user_status ON datasets(user_id, status);
 
 -- ============================================================================
 -- TABLE 3: dataset_rows
 -- ============================================================================
-CREATE TABLE dataset_rows (
+CREATE TABLE IF NOT EXISTS dataset_rows (
   id BIGSERIAL PRIMARY KEY,
   dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
   row_index INTEGER NOT NULL,
   data JSONB NOT NULL
 );
 
-CREATE INDEX idx_dataset_rows_dataset_id ON dataset_rows(dataset_id);
-CREATE INDEX idx_dataset_rows_data ON dataset_rows USING GIN (data);
+CREATE INDEX IF NOT EXISTS idx_dataset_rows_dataset_id ON dataset_rows(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_dataset_rows_data ON dataset_rows USING GIN (data);
 
 -- ============================================================================
 -- TABLE 4: statistical_snapshots
 -- ============================================================================
-CREATE TABLE statistical_snapshots (
+CREATE TABLE IF NOT EXISTS statistical_snapshots (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
   computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -86,13 +86,13 @@ CREATE TABLE statistical_snapshots (
   confidence_base FLOAT NOT NULL
 );
 
-CREATE INDEX idx_statistical_snapshots_dataset_id ON statistical_snapshots(dataset_id);
-CREATE INDEX idx_statistical_snapshots_computed_at ON statistical_snapshots(dataset_id, computed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_statistical_snapshots_dataset_id ON statistical_snapshots(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_statistical_snapshots_computed_at ON statistical_snapshots(dataset_id, computed_at DESC);
 
 -- ============================================================================
 -- TABLE 5: insights
 -- ============================================================================
-CREATE TABLE insights (
+CREATE TABLE IF NOT EXISTS insights (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
   snapshot_id UUID NOT NULL REFERENCES statistical_snapshots(id) ON DELETE CASCADE,
@@ -118,15 +118,15 @@ CREATE TABLE insights (
   CONSTRAINT valid_confidence_label CHECK (confidence_label IN ('High', 'Medium', 'Low'))
 );
 
-CREATE INDEX idx_insights_dataset_id ON insights(dataset_id);
-CREATE INDEX idx_insights_confidence ON insights(dataset_id, confidence DESC);
-CREATE INDEX idx_insights_created_at ON insights(dataset_id, created_at DESC);
-CREATE INDEX idx_insights_is_proactive ON insights(is_proactive);
+CREATE INDEX IF NOT EXISTS idx_insights_dataset_id ON insights(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_insights_confidence ON insights(dataset_id, confidence DESC);
+CREATE INDEX IF NOT EXISTS idx_insights_created_at ON insights(dataset_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_insights_is_proactive ON insights(is_proactive);
 
 -- ============================================================================
 -- TABLE 6: chat_sessions
 -- ============================================================================
-CREATE TABLE chat_sessions (
+CREATE TABLE IF NOT EXISTS chat_sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE,
@@ -134,13 +134,13 @@ CREATE TABLE chat_sessions (
   last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_chat_sessions_user_id ON chat_sessions(user_id);
-CREATE INDEX idx_chat_sessions_dataset_id ON chat_sessions(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_dataset_id ON chat_sessions(dataset_id);
 
 -- ============================================================================
 -- TABLE 7: chat_messages
 -- ============================================================================
-CREATE TABLE chat_messages (
+CREATE TABLE IF NOT EXISTS chat_messages (
   id BIGSERIAL PRIMARY KEY,
   session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
   role VARCHAR(20) NOT NULL,
@@ -151,13 +151,13 @@ CREATE TABLE chat_messages (
   CONSTRAINT valid_role CHECK (role IN ('user', 'assistant', 'system'))
 );
 
-CREATE INDEX idx_chat_messages_session_id ON chat_messages(session_id);
-CREATE INDEX idx_chat_messages_created_at ON chat_messages(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(session_id, created_at DESC);
 
 -- ============================================================================
 -- TABLE 8: monitoring_alerts
 -- ============================================================================
-CREATE TABLE monitoring_alerts (
+CREATE TABLE IF NOT EXISTS monitoring_alerts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
   alert_type VARCHAR(30) NOT NULL,
@@ -172,14 +172,14 @@ CREATE TABLE monitoring_alerts (
   CONSTRAINT valid_severity CHECK (severity IN ('critical', 'warning', 'info'))
 );
 
-CREATE INDEX idx_monitoring_alerts_dataset_id ON monitoring_alerts(dataset_id);
-CREATE INDEX idx_monitoring_alerts_seen ON monitoring_alerts(seen, triggered_at DESC);
-CREATE INDEX idx_monitoring_alerts_triggered_at ON monitoring_alerts(triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_monitoring_alerts_dataset_id ON monitoring_alerts(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_monitoring_alerts_seen ON monitoring_alerts(seen, triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_monitoring_alerts_triggered_at ON monitoring_alerts(triggered_at DESC);
 
 -- ============================================================================
 -- TABLE 9: reasoning_logs
 -- ============================================================================
-CREATE TABLE reasoning_logs (
+CREATE TABLE IF NOT EXISTS reasoning_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   insight_id UUID NOT NULL REFERENCES insights(id) ON DELETE CASCADE,
   step_number INTEGER NOT NULL,
@@ -190,12 +190,12 @@ CREATE TABLE reasoning_logs (
   logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_reasoning_logs_insight_id ON reasoning_logs(insight_id);
+CREATE INDEX IF NOT EXISTS idx_reasoning_logs_insight_id ON reasoning_logs(insight_id);
 
 -- ============================================================================
 -- TABLE 10: reasoning_outputs
 -- ============================================================================
-CREATE TABLE reasoning_outputs (
+CREATE TABLE IF NOT EXISTS reasoning_outputs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
   insight_id UUID REFERENCES insights(id) ON DELETE SET NULL,
@@ -210,14 +210,14 @@ CREATE TABLE reasoning_outputs (
   CONSTRAINT valid_reasoning_linkage CHECK (insight_id IS NOT NULL OR snapshot_id IS NOT NULL)
 );
 
-CREATE INDEX idx_reasoning_outputs_dataset_id ON reasoning_outputs(dataset_id);
-CREATE INDEX idx_reasoning_outputs_computation_id ON reasoning_outputs(computation_id);
-CREATE INDEX idx_reasoning_outputs_created_at ON reasoning_outputs(dataset_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reasoning_outputs_dataset_id ON reasoning_outputs(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_reasoning_outputs_computation_id ON reasoning_outputs(computation_id);
+CREATE INDEX IF NOT EXISTS idx_reasoning_outputs_created_at ON reasoning_outputs(dataset_id, created_at DESC);
 
 -- ============================================================================
 -- TABLE 11: audit_logs
 -- ============================================================================
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
   action_type VARCHAR(30) NOT NULL,
@@ -229,13 +229,13 @@ CREATE TABLE audit_logs (
   CONSTRAINT valid_status CHECK (status IN ('started', 'success', 'warning', 'failed', 'completed'))
 );
 
-CREATE INDEX idx_audit_logs_dataset_id ON audit_logs(dataset_id);
-CREATE INDEX idx_audit_logs_action_type ON audit_logs(dataset_id, action_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_dataset_id ON audit_logs(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON audit_logs(dataset_id, action_type, created_at DESC);
 
 -- ============================================================================
 -- TABLE 12: notifications
 -- ============================================================================
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title VARCHAR(255) NOT NULL,
@@ -245,13 +245,13 @@ CREATE TABLE notifications (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_notifications_read ON notifications(user_id, read, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, read, created_at DESC);
 
 -- ============================================================================
 -- TABLE 13: comments
 -- ============================================================================
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -260,13 +260,13 @@ CREATE TABLE comments (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_comments_dataset_id ON comments(dataset_id);
-CREATE INDEX idx_comments_created_at ON comments(dataset_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_comments_dataset_id ON comments(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(dataset_id, created_at DESC);
 
 -- ============================================================================
 -- TABLE 14: reports
 -- ============================================================================
-CREATE TABLE reports (
+CREATE TABLE IF NOT EXISTS reports (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title VARCHAR(255) NOT NULL,
