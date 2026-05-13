@@ -250,7 +250,7 @@ async function createInsightsFromAnalysis(datasetId, snapshotId, analysisResult,
   const insights = filteredFindings.map((finding) => {
     const confidence = typeof finding.confidence === 'number'
       ? Math.max(0, Math.min(0.97, finding.confidence))
-      : Math.max(0, Math.min(0.97, analysisResult.confidence_base || 0.0));
+      : Math.max(0, Math.min(0.97, analysisResult.confidence || 0.0));
 
     return {
       ...insightBase,
@@ -330,7 +330,7 @@ async function storeSnapshotFromAnalysis(datasetId, analysisResult) {
     data_quality: analysisResult.data_quality || {},
     computation_id: computationId,
     dataset_version: datasetVersion,
-    confidence_base: analysisResult.confidence_base || 0,
+    confidence_base: analysisResult.confidence || 0,
   };
 
   const { data, error } = await supabase.from('statistical_snapshots').insert(snapshotPayload).select().single();
@@ -725,7 +725,7 @@ function buildReasoningOutput(dataset, snapshot, analysisResult) {
   const context = {
     row_count: snapshot?.row_count || analysisResult.row_count || dataset?.row_count || 0,
     data_quality: snapshot?.data_quality || analysisResult.data_quality || {},
-    confidence_base: analysisResult.confidence_base || 0,
+    confidence_base: analysisResult.confidence || 0,
   };
 
   const candidates = [];

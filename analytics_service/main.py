@@ -525,7 +525,7 @@ class NexusAnalyticsEngine:
                 "trends": trends,
                 "anomalies": anomalies,
                 "data_quality": data_quality,
-                "confidence_base": confidence_base,
+                "confidence": confidence_base,
                 "top_findings": top_findings,
                 "computed_at": datetime.utcnow().isoformat()
             }
@@ -911,7 +911,7 @@ async def analyze_dataset(dataset_id: str, api_key: str = Depends(verify_api_key
                     json.dumps(result["data_quality"]),
                     computation_id,
                     dataset_version,
-                    result["confidence_base"]
+                    result["confidence"]
                 )
             )
             snapshot_id = cur.fetchone()[0]
@@ -919,6 +919,7 @@ async def analyze_dataset(dataset_id: str, api_key: str = Depends(verify_api_key
             cur.close()
 
             result["snapshot_id"] = snapshot_id
+            # TODO: After insights are generated, call createReasoningFromAnalysis(datasetId, snapshot_id, result, userId)
             return result
         finally:
             release_db_connection(conn)
@@ -954,7 +955,7 @@ async def get_latest_snapshot(dataset_id: str, api_key: str = Depends(verify_api
             cur.execute(
                 """
                 SELECT id, computed_at, row_count, column_stats, correlations, outliers, 
-                       trends, anomalies, data_quality, confidence_base
+                       trends, anomalies, data_quality, confidence_base AS confidence
                 FROM statistical_snapshots
                 WHERE dataset_id = %s
                 ORDER BY computed_at DESC
@@ -978,7 +979,7 @@ async def get_latest_snapshot(dataset_id: str, api_key: str = Depends(verify_api
                 "trends": row[6],
                 "anomalies": row[7],
                 "data_quality": row[8],
-                "confidence_base": row[9]
+                "confidence": row[9]
             }
         
         finally:
