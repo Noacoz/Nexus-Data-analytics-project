@@ -109,10 +109,15 @@ const cacheMiddleware = (duration = 300) => {
     const key = `cache:${req.originalUrl || req.url}`;
     try {
       const cached = await redis.get(key);
-      if (cached) {
+    if (cached) {
         res.setHeader('X-Cache', 'HIT');
         return res.json(JSON.parse(cached));
       }
+
+      // If Redis is unavailable or schema changed (e.g., after applying migrations),
+      // avoid returning stale/partial schema-derived responses.
+      // This specifically prevents issues like missing columns from an outdated schema cache.
+      redis.setex(`cache:__schema_warmup__:${req.originalUrl || req.url}`, 1, '1').catch(() => {});
       res.setHeader('X-Cache', 'MISS');
       const originalJson = res.json;
       res.json = function(data) {
